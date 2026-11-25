@@ -14,9 +14,9 @@ import { isSupabaseConfigured, requireSupabase, supabase } from "@/lib/supabase"
 import { normalizeCode } from "@/services/couponService";
 import { deleteStoreImage } from "@/services/storageService";
 
-const KEY = "use-camile-store-v1";
-const STORE_EVENT = "camile-store";
-const DEFAULT_BANNER_ALT = "Banner Use Camile Acessórios";
+const KEY = "amora-acessorios-store-v1";
+const STORE_EVENT = "amora-store";
+const DEFAULT_BANNER_ALT = "Banner Amora Acessórios";
 
 export type StoreScope = "public" | "admin";
 

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migração incremental 002: Categorias e Materiais dinâmicos
--- Use Camile Acessórios — Seguro para executar em bancos já em produção
+-- Amora Acessórios — Seguro para executar em bancos já em produção
 -- (não apaga nem altera produtos existentes).
 -- ============================================================================
 
@@ -82,14 +82,20 @@ create index if not exists idx_catalog_options_type_created
 -- ----------------------------------------------------------------------------
 insert into public.catalog_options (type, name)
 values
+  ('category', 'Semijoias'),
+  ('category', 'Bolsas'),
+  ('category', 'Aluguel de Bolsas'),
+  ('category', 'Maquiagens'),
   ('category', 'Anéis'),
   ('category', 'Colares'),
   ('category', 'Brincos'),
   ('category', 'Pulseiras'),
-  ('category', 'Tornozeleiras'),
   ('category', 'Conjuntos'),
+  ('material', 'Semijoia'),
   ('material', 'Prata 925'),
-  ('material', 'Semijoia')
+  ('material', 'Bolsa'),
+  ('material', 'Aluguel'),
+  ('material', 'Maquiagem')
 on conflict do nothing;
 
 insert into public.catalog_options (type, name)

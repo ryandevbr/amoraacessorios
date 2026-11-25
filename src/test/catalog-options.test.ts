@@ -29,15 +29,20 @@ describe("Catalog options service (fallback local)", () => {
 
     expect(categories).toEqual(
       expect.arrayContaining([
+        "Semijoias",
+        "Bolsas",
+        "Aluguel de Bolsas",
+        "Maquiagens",
         "Anéis",
         "Colares",
         "Brincos",
         "Pulseiras",
-        "Tornozeleiras",
         "Conjuntos",
       ]),
     );
-    expect(materials).toEqual(expect.arrayContaining(["Prata 925", "Semijoia"]));
+    expect(materials).toEqual(
+      expect.arrayContaining(["Semijoia", "Prata 925", "Bolsa", "Aluguel", "Maquiagem"]),
+    );
   });
 
   it("trims whitespace, blocks empty values, and prevents case-insensitive duplicates", async () => {

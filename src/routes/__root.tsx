@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Toaster } from "sonner";
+import { BrandLogo } from "@/components/brand-logo";
 
 import appCss from "../styles.css?url";
 
@@ -17,7 +18,7 @@ function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <img src="/logo.png" alt="Use Camile Acessórios" className="brand-logo mx-auto mb-8" />
+        <BrandLogo size="lg" centered className="mb-8" />
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">
           Esta página não foi encontrada
@@ -78,16 +79,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Use Camile Acessórios" },
+      { title: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo" },
       {
         name: "description",
-        content: "Prata 925 e Semijoias. Loja 100% online com envio para todo o Brasil.",
+        content:
+          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Loja física no Olaria, Timóteo - MG, e atendimento pelo WhatsApp (31) 98881-3158.",
       },
       { name: "color-scheme", content: "light only" },
       // Remover no lançamento no domínio oficial .com.br.
       { name: "robots", content: "noindex, nofollow" },
-      { property: "og:title", content: "Use Camile Acessórios" },
-      { property: "og:description", content: "Seu estilo merece esse brilho." },
+      {
+        property: "og:title",
+        content: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo",
+      },
+      {
+        property: "og:description",
+        content:
+          "Realce sua beleza em cada detalhe: semijoias, bolsas para venda e aluguel e maquiagens a partir de R$ 10 no Olaria, Timóteo - MG.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -96,7 +105,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "icon", href: "/favicon.ico", type: "image/ico" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {

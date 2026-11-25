@@ -389,17 +389,22 @@ function matchAllowedOptionWithFallback(value: unknown, allowed: string[]): stri
 
 function buildSystemPrompt(categories: string[], materials: string[]): string {
   return [
-    "Você é a especialista em curadoria e copywriting da loja brasileira de joias e acessórios femininos 'Use Camile Acessórios'.",
-    "Analise cuidadosamente a foto do acessório e responda EXCLUSIVAMENTE com um objeto JSON válido em português do Brasil (pt-BR), sem markdown, sem comentários e sem texto extra.",
+    "Você é a especialista em curadoria e copywriting da loja brasileira 'Amora Acessórios', especializada em semijoias, venda e aluguel de bolsas/clutches e maquiagens.",
+    "Analise cuidadosamente a foto do produto (pode ser uma semijoia/prata, uma bolsa/clutch de venda ou festa/aluguel, ou um item de maquiagem) e responda EXCLUSIVAMENTE com um objeto JSON válido em português do Brasil (pt-BR), sem markdown, sem comentários e sem texto extra.",
+    "",
+    "Diretrizes por tipo de produto:",
+    "- Semijoias e Prata 925 (anéis, colares, brincos, pulseiras, conjuntos): peças douradas/banhadas tendem a 'Semijoia' e peças prateadas tendem a 'Prata 925'. Características sugeridas: Acabamento, Cor, Pedra, Fecho, Estilo, Ocasião.",
+    "- Bolsas e Clutches: identifique bolsas casuais/estruturadas (categoria 'Bolsas', material/linha 'Bolsa') ou clutches/bolsas de festa com brilho/pérolas/metalizadas (categoria 'Aluguel de Bolsas' ou 'Bolsas', material/linha 'Aluguel' ou 'Bolsa'). Características sugeridas: Modelo, Cor, Textura/Acabamento, Alça, Fechamento, Ocasião.",
+    "- Maquiagens (batons, glosses, blushes, sombras, máscaras, pincéis, pós, iluminadores): use categoria 'Maquiagens' e material/linha 'Maquiagem'. Características sugeridas: Tipo, Tom/Cor, Acabamento, Textura, Indicação.",
     "",
     "Schema JSON obrigatório:",
     "{",
-    '  "name": "string — nome comercial elegante, curto e atrativo em português (ex.: Brinco Argola Cravejada Zircônias), sem SKU, preço ou nome da loja",',
+    '  "name": "string — nome comercial elegante, curto e atrativo em português (ex.: Brinco Argola Cravejada Zircônias, Clutch Festa Pérolas Dourada, Gloss Labial Brilho Espelhado), sem SKU, preço ou nome da loja",',
     `  "category": "string — EXATAMENTE uma opção de: ${categories.join(", ")}",`,
-    `  "material": "string — EXATAMENTE uma opção de: ${materials.join(", ")} (peças douradas/banhadas a ouro tendem a ser Semijoia e peças prateadas tendem a ser Prata 925, respeitando estritamente as opções disponíveis)",`,
-    '  "description": "string — 2 a 3 frases elegantes, femininas e persuasivas destacando estilo, brilho e versatilidade, SEM inventar medidas em cm/mm, peso ou garantia",',
+    `  "material": "string — EXATAMENTE uma opção de: ${materials.join(", ")} (respeitando estritamente as opções disponíveis)",`,
+    '  "description": "string — 2 a 3 frases elegantes, femininas e persuasivas destacando estilo, acabamento e versatilidade do produto, SEM inventar medidas em cm/mm, peso, ml ou prazo de garantia",',
     '  "characteristics": [',
-    '    { "label": "string (ex.: Acabamento, Cor, Pedra, Fecho, Estilo, Ocasião)", "value": "string — apenas atributos visíveis, sem inventar tamanhos numéricos" }',
+    '    { "label": "string — atributo relevante para o tipo de produto", "value": "string — apenas atributos visíveis na foto, sem inventar dimensões numéricas" }',
     "  ] // de 3 a 5 itens",
     "}",
   ].join("\n");
@@ -411,7 +416,8 @@ function buildGeminiResponseSchema(categories: string[], materials: string[]) {
     properties: {
       name: {
         type: "STRING",
-        description: "Nome comercial elegante, curto e atrativo em português.",
+        description:
+          "Nome comercial elegante, curto e atrativo em português para semijoia, bolsa/clutch ou maquiagem.",
       },
       category: {
         type: "STRING",
@@ -421,12 +427,12 @@ function buildGeminiResponseSchema(categories: string[], materials: string[]) {
       material: {
         type: "STRING",
         enum: materials,
-        description: "Material exato escolhido dentre as opções disponíveis.",
+        description: "Material ou linha exata escolhida dentre as opções disponíveis.",
       },
       description: {
         type: "STRING",
         description:
-          "Descrição de 2 a 3 frases elegantes, femininas e persuasivas sem inventar medidas, peso ou garantia.",
+          "Descrição de 2 a 3 frases elegantes, femininas e persuasivas sem inventar medidas, peso, volume ou garantia.",
       },
       characteristics: {
         type: "ARRAY",
@@ -561,7 +567,7 @@ async function callOpenAiCompatibleVision(params: {
   };
   if (params.attempt.provider === "openrouter") {
     if (params.referer) headers["http-referer"] = params.referer;
-    headers["x-title"] = "Use Camile Acessorios";
+    headers["x-title"] = "Amora Acessorios";
   }
 
   let res: Response;
@@ -581,7 +587,7 @@ async function callOpenAiCompatibleVision(params: {
             content: [
               {
                 type: "text",
-                text: "Analise esta peça de acessório e retorne apenas o JSON preenchido.",
+                text: "Analise este produto (semijoia, bolsa/clutch ou maquiagem) e retorne apenas o JSON preenchido.",
               },
               {
                 type: "image_url",
@@ -709,14 +715,23 @@ export async function handleAnalyzeProductRequest(request: Request): Promise<Res
   if (resolvedImage instanceof Response) return resolvedImage;
 
   const availableCategories = sanitizeOptionList(body.availableCategories, [
+    "Semijoias",
+    "Bolsas",
+    "Aluguel de Bolsas",
+    "Maquiagens",
     "Anéis",
     "Colares",
     "Brincos",
     "Pulseiras",
-    "Tornozeleiras",
     "Conjuntos",
   ]);
-  const availableMaterials = sanitizeOptionList(body.availableMaterials, ["Prata 925", "Semijoia"]);
+  const availableMaterials = sanitizeOptionList(body.availableMaterials, [
+    "Semijoia",
+    "Prata 925",
+    "Bolsa",
+    "Aluguel",
+    "Maquiagem",
+  ]);
   const referer = request.headers.get("origin") ?? request.headers.get("referer") ?? undefined;
 
   let hadDemandFailure = false;

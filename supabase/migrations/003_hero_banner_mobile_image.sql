@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migração incremental 003: Imagem opcional para celular nos Banners do Hero
--- Use Camile Acessórios — Seguro para executar em bancos já em produção.
+-- Amora Acessórios — Seguro para executar em bancos já em produção.
 -- ============================================================================
 
 alter table public.hero_banners

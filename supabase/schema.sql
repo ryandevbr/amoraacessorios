@@ -1,5 +1,5 @@
 -- ============================================================================
--- Use Camile Acessórios — Schema completo para Supabase (PostgreSQL + Storage)
+-- Amora Acessórios — Schema completo para Supabase (PostgreSQL + Storage)
 -- Execute este arquivo no SQL Editor do projeto Supabase.
 -- ============================================================================
 
@@ -51,7 +51,7 @@ create table if not exists public.hero_banners (
   id uuid primary key default gen_random_uuid(),
   image_url text not null check (btrim(image_url) <> ''),
   mobile_image_url text,
-  alt text not null default 'Banner Use Camile Acessórios' check (btrim(alt) <> ''),
+  alt text not null default 'Banner Amora Acessórios' check (btrim(alt) <> ''),
   active boolean not null default true,
   filter text not null default '',
   display_order integer not null default 0,
@@ -174,21 +174,27 @@ insert into public.store_settings (id, announcement_active, announcement_text, a
 values (
   1,
   true,
-  'Sua primeira compra merece um brilho extra: 10% OFF com PRIMEIRACOMPRA',
+  'Semijoias, bolsas & maquiagens ✨ Use o cupom PRIMEIRACOMPRA e ganhe 10% OFF',
   '#vitrine'
 )
 on conflict (id) do nothing;
 
 insert into public.catalog_options (type, name)
 values
+  ('category', 'Semijoias'),
+  ('category', 'Bolsas'),
+  ('category', 'Aluguel de Bolsas'),
+  ('category', 'Maquiagens'),
   ('category', 'Anéis'),
   ('category', 'Colares'),
   ('category', 'Brincos'),
   ('category', 'Pulseiras'),
-  ('category', 'Tornozeleiras'),
   ('category', 'Conjuntos'),
+  ('material', 'Semijoia'),
   ('material', 'Prata 925'),
-  ('material', 'Semijoia')
+  ('material', 'Bolsa'),
+  ('material', 'Aluguel'),
+  ('material', 'Maquiagem')
 on conflict do nothing;
 
 -- ----------------------------------------------------------------------------
@@ -363,3 +369,5 @@ create policy "Admin pode excluir imagens da loja"
   for delete
   to authenticated
   using (bucket_id = 'store-media');
+
+notify pgrst, 'reload schema';

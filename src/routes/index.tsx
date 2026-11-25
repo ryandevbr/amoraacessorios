@@ -3,17 +3,20 @@ import { Storefront } from "@/components/storefront";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Use Camile Acessórios | Prata 925 e Semijoias" },
+      { title: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo" },
       {
         name: "description",
         content:
-          "Acessórios selecionados com carinho. Descubra Prata 925 e Semijoias, monte sua sacola e compre pelo WhatsApp. Enviamos para todo o Brasil.",
+          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Retire na loja física na Rua 68, Nº 22 — Olaria, Timóteo - MG ou peça pelo WhatsApp (31) 98881-3158.",
       },
-      { property: "og:title", content: "Use Camile Acessórios | Seu estilo merece esse brilho" },
+      {
+        property: "og:title",
+        content: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo",
+      },
       {
         property: "og:description",
         content:
-          "Prata 925 e Semijoias com atendimento personalizado. Loja 100% online, entregas em todo o Brasil.",
+          "Realce sua beleza em cada detalhe: semijoias, bolsas para venda e aluguel e maquiagens a partir de R$ 10. Atendimento personalizado no Olaria, Timóteo - MG.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

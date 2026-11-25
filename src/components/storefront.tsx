@@ -5,7 +5,7 @@ import {
   Search,
   ShoppingBag,
   Sparkles,
-  Truck,
+  MapPin,
   ShieldCheck,
   MessageCircle,
   Instagram,
@@ -15,11 +15,11 @@ import {
   Trash2,
   Share2,
   Check,
-  CreditCard,
   Heart,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand-logo";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useStore } from "@/services/storeService";
@@ -39,16 +39,29 @@ function matchesFilter(product: Product, selected: string): boolean {
   const productCategory = optionLookupKey(product.category);
   const productMaterial = optionLookupKey(product.material);
   if (target === "semijoias" && productMaterial === "semijoia") return true;
+  if (target === "bolsas" && productMaterial === "bolsa") return true;
+  if (target === "maquiagens" && productMaterial === "maquiagem") return true;
+  if (target === "aluguel de bolsas" && productMaterial === "aluguel") return true;
+  if (target === "aluguel" && productCategory === "aluguel de bolsas") return true;
   return productCategory === target || productMaterial === target;
 }
 
 function getMaterialBadgeClass(material: string): string {
   const key = optionLookupKey(material);
+  if (key.includes("aluguel")) {
+    return "bg-primary/95 text-primary-foreground border border-gold/45 backdrop-blur-sm";
+  }
   if (key.includes("prata")) {
-    return "bg-background/95 text-foreground border border-border/80 backdrop-blur-sm";
+    return "bg-background/95 text-foreground border border-border/90 backdrop-blur-sm";
   }
   if (key.includes("semijoia") || key.includes("ouro") || key.includes("dourad")) {
-    return "bg-secondary/95 text-foreground border border-primary/25 backdrop-blur-sm";
+    return "bg-secondary/95 text-foreground border border-gold/50 backdrop-blur-sm";
+  }
+  if (key.includes("bolsa")) {
+    return "bg-secondary/95 text-primary border border-primary/20 backdrop-blur-sm";
+  }
+  if (key.includes("maquiag") || key.includes("make")) {
+    return "bg-background/95 text-primary border border-gold/55 backdrop-blur-sm";
   }
   return "bg-background/95 text-foreground/90 border border-border/80 backdrop-blur-sm";
 }
@@ -73,7 +86,7 @@ export function Storefront() {
   const [slide, setSlide] = useState(0);
   useEffect(() => {
     try {
-      setCart(JSON.parse(localStorage.getItem("camile-bag") ?? "[]"));
+      setCart(JSON.parse(localStorage.getItem("amora-bag") ?? "[]"));
     } catch {}
     setReady(true);
   }, []);
@@ -89,7 +102,7 @@ export function Storefront() {
     }
   }, [ready, data.products]);
   useEffect(() => {
-    if (ready) localStorage.setItem("camile-bag", JSON.stringify(cart));
+    if (ready) localStorage.setItem("amora-bag", JSON.stringify(cart));
   }, [cart, ready]);
   useEffect(() => {
     setVisibleCount(PRODUCTS_PER_PAGE);
@@ -131,7 +144,7 @@ export function Storefront() {
   const filters = [
     "Todos",
     "Promoções",
-    ...mergeOptionValues([...dynamicMaterials, ...dynamicCategories]),
+    ...mergeOptionValues([...dynamicCategories, ...dynamicMaterials]),
   ];
   const filteredProducts = activeProducts
     .filter(
@@ -177,7 +190,7 @@ export function Storefront() {
   }
   const checkout = () => {
     const lines = [
-      "Olá, Use Camile Acessórios! ✨",
+      "Olá, Amora Acessórios! ✨",
       "Gostaria de finalizar meu pedido feito pelo site:",
       "",
       cart
@@ -197,9 +210,9 @@ export function Storefront() {
       `Total estimado: ${money(total)}`,
       "",
       ...(name ? [`Nome: ${name}`] : []),
-      ...(city ? [`CEP/Cidade: ${city}`] : []),
+      ...(city ? [`Bairro/Cidade ou Retirada: ${city}`] : []),
       "",
-      "Aguardo para combinarmos o frete e a forma de pagamento!",
+      "Aguardo para combinarmos a retirada no Olaria, entrega ou forma de pagamento!",
     ];
     window.open(
       `${storeContent.whatsapp}?text=${encodeURIComponent(lines.join("\n"))}`,
@@ -212,9 +225,8 @@ export function Storefront() {
       {data.announcement.active && data.announcement.text.trim() && (
         <div className="bg-primary text-primary-foreground text-center px-4 py-2.5 text-[10px] sm:text-xs">
           <a href={data.announcement.link || "#vitrine"} className="inline-flex gap-2 items-center">
-            <Sparkles size={12} />
-            {data.announcement.text}
-            <span className="hidden sm:inline"> · Enviamos para todo o Brasil</span>
+            <Sparkles size={12} className="text-gold-light shrink-0" />
+            <span>{data.announcement.text}</span>
           </a>
         </div>
       )}
@@ -222,20 +234,27 @@ export function Storefront() {
         <div className="shell flex items-center justify-between gap-3 md:grid md:grid-cols-[1fr_auto_1fr] h-17 sm:h-18.5 md:h-20">
           <a
             href="#inicio"
-            aria-label="Use Camile — início"
+            aria-label="Amora Acessórios — início"
             className="inline-flex items-center shrink-0"
           >
-            <img
-              src="/logo.png"
-              alt="Use Camile Acessórios"
-              className="h-12 sm:h-14 md:h-16 w-auto max-w-none shrink-0 object-contain"
-            />
+            <BrandLogo size="md" />
           </a>
-          <nav className="hidden md:flex justify-center gap-8 text-xs text-muted-foreground">
-            <a href="#inicio">Início</a>
-            <a href="#vitrine">Vitrine</a>
-            <a href="#envios-entregas">Envios e entregas</a>
-            <a href="#sobre">Sobre</a>
+          <nav className="hidden md:flex justify-center gap-7 text-xs text-muted-foreground">
+            <a href="#inicio" className="transition-colors hover:text-primary">
+              Início
+            </a>
+            <a href="#vitrine" className="transition-colors hover:text-primary">
+              Vitrine
+            </a>
+            <a href="#como-comprar" className="transition-colors hover:text-primary">
+              Como comprar
+            </a>
+            <a href="#onde-estamos" className="transition-colors hover:text-primary">
+              Onde estamos
+            </a>
+            <a href="#sobre" className="transition-colors hover:text-primary">
+              Sobre
+            </a>
           </nav>
           <div className="flex gap-2 sm:gap-4 justify-end items-center shrink-0">
             <Button
@@ -257,7 +276,7 @@ export function Storefront() {
             >
               <ShoppingBag />
               <span className="hidden sm:inline text-xs">Sacola</span>
-              <span className="rounded-full bg-secondary text-foreground text-[10px] h-5 w-5 grid place-items-center">
+              <span className="rounded-full bg-secondary border border-gold-light/70 text-primary font-medium text-[10px] h-5 w-5 grid place-items-center">
                 {count}
               </span>
             </Button>
@@ -284,7 +303,7 @@ export function Storefront() {
                   {mobileUrl && <source media="(max-width: 767px)" srcSet={mobileUrl} />}
                   <img
                     src={b.image_url}
-                    alt={b.alt || "Banner Use Camile Acessórios"}
+                    alt={b.alt || "Banner Amora Acessórios"}
                     className={`w-full h-full object-cover ${
                       mobileUrl ? "object-center" : "object-[72%_center] md:object-center"
                     }`}
@@ -298,7 +317,7 @@ export function Storefront() {
             <div className="hero-scrim pointer-events-none" />
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-linear-to-t from-[#FAF8FB] to-transparent md:hidden"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-linear-to-t from-muted to-transparent md:hidden"
             />
             {banners.length > 1 && (
               <div className="absolute bottom-3 right-4 md:bottom-6 md:right-8 z-10 flex gap-2">
@@ -314,21 +333,22 @@ export function Storefront() {
               </div>
             )}
           </div>
-          <div className="shell hero-content bg-[#FAF8FB] md:bg-transparent pointer-events-none">
-            <div className="max-w-127.5 pointer-events-auto">
-              <p className="eyebrow text-[#7A6A66] md:text-muted-foreground flex gap-2 items-center mb-4 md:mb-5">
-                <Sparkles size={15} className="text-[#C91E7C] md:text-primary" /> Delicadeza que faz
-                a diferença
+          <div className="shell hero-content bg-muted md:bg-transparent pointer-events-none">
+            <div className="max-w-135 pointer-events-auto">
+              <p className="eyebrow text-muted-foreground flex gap-2 items-center mb-4 md:mb-5">
+                <Sparkles size={15} className="text-gold shrink-0" /> {storeContent.subtitle}
               </p>
-              <h1 className="text-[#3D3533] md:text-foreground">
-                Invista em você:
+              <h1 className="text-foreground">
+                Realce sua beleza
                 <br />
-                acessórios são a<br />
-                <em className="text-[#C91E7C] md:text-primary">alma do look!</em>
+                em cada detalhe:
+                <br />
+                <em className="text-primary">semijoias, bolsas &amp; makes</em>
               </h1>
-              <p className="text-[#5C514E] md:text-muted-foreground text-sm leading-7 mt-4 md:mt-6 max-w-98.75">
-                Prata 925 e Semijoias selecionadas para realçar o seu estilo. Peças especiais, para
-                todos os seus momentos.
+              <p className="text-muted-foreground text-sm leading-7 mt-4 md:mt-6 max-w-105">
+                Semijoias elegantes, venda e aluguel de bolsas para ocasiões especiais e maquiagens
+                a partir de R$ 10. Atendimento acolhedor no bairro Olaria, em Timóteo, e pelo
+                WhatsApp.
               </p>
               <div className="flex flex-wrap gap-3 mt-6 md:mt-7">
                 <Button size="lg" onClick={() => scroll("Todos")}>
@@ -342,11 +362,11 @@ export function Storefront() {
                 </Button>
               </div>
               <a
-                href="#envios-entregas"
-                className="inline-flex gap-2 items-center text-[11px] text-[#5C514E] md:text-muted-foreground mt-5"
+                href="#onde-estamos"
+                className="inline-flex gap-2 items-center text-[11px] text-muted-foreground hover:text-primary transition-colors mt-5"
               >
-                <Truck size={14} />
-                Envios e entregas <ArrowRight size={12} />
+                <MapPin size={14} className="text-gold shrink-0" />
+                {storeContent.address} <ArrowRight size={12} />
               </a>
             </div>
           </div>
@@ -354,15 +374,15 @@ export function Storefront() {
         <div className="bg-background border-b">
           <div className="shell grid grid-cols-2 md:grid-cols-4 py-6 gap-5 text-[11px] text-muted-foreground">
             {[
-              [Truck, "Para todo o Brasil"],
-              [Sparkles, "Prata 925 & Semijoias"],
-              [Heart, "Curadoria feita com carinho"],
-              [ShieldCheck, "Atendimento personalizado"],
+              [Sparkles, "Semijoias & Prata 925"],
+              [ShoppingBag, "Venda e Aluguel de Bolsas"],
+              [Heart, "Maquiagens a partir de R$ 10"],
+              [MapPin, "Loja física no Olaria · Timóteo"],
             ].map(([Icon, text], i) => {
-              const C = Icon as typeof Truck;
+              const C = Icon as typeof Sparkles;
               return (
                 <div key={i} className="flex justify-center items-center gap-2">
-                  <C size={17} className="text-primary shrink-0" />
+                  <C size={17} className="text-gold shrink-0" />
                   <span>{text as string}</span>
                 </div>
               );
@@ -371,10 +391,10 @@ export function Storefront() {
         </div>
         <section id="vitrine" className="shell pt-16 pb-20">
           <div className="text-center">
-            <p className="eyebrow text-primary mb-3">Encontre seu próximo favorito</p>
-            <h2 className="section-title">Um brilho para chamar de seu</h2>
+            <p className="eyebrow text-gold mb-3">Curadoria Amora Acessórios</p>
+            <h2 className="section-title">Um toque de elegância para cada momento</h2>
             <p className="text-sm text-muted-foreground mt-3">
-              Pequenos detalhes. Grandes encantos.
+              Semijoias, bolsas para compra ou aluguel e maquiagens a partir de R$ 10.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2 mt-8">
@@ -399,7 +419,7 @@ export function Storefront() {
               <input
                 id="search"
                 aria-label="Buscar por nome ou SKU"
-                placeholder="Qual peça você procura?"
+                placeholder="Buscar semijoias, bolsas ou makes..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="w-full pl-10! bg-muted text-sm"
@@ -439,7 +459,7 @@ export function Storefront() {
                         {p.sale_label || `${((1 - p.sale_price / p.price) * 100).toFixed(0)}% OFF`}
                       </span>
                     ) : p.featured ? (
-                      <span className="bg-background/90 text-foreground px-2 py-1 text-[9px] uppercase tracking-wide">
+                      <span className="bg-background/95 text-primary border border-gold-light/70 px-2 py-1 text-[9px] uppercase tracking-wide">
                         Destaque
                       </span>
                     ) : null}
@@ -502,7 +522,7 @@ export function Storefront() {
                   type="button"
                   variant="outline"
                   onClick={() => setVisibleCount((prev) => prev + PRODUCTS_PER_PAGE)}
-                  className="min-h-11 px-8 rounded-full border-[#C91E7C] bg-transparent text-[#C91E7C] text-xs font-medium tracking-wide transition-colors hover:bg-[#C91E7C] hover:text-white"
+                  className="min-h-11 px-8 rounded-full border-primary bg-transparent text-primary text-xs font-medium tracking-wide transition-colors hover:bg-primary hover:text-primary-foreground"
                 >
                   Ver mais {nextBatchCount} {nextBatchCount === 1 ? "peça" : "peças"}
                 </Button>
@@ -510,65 +530,109 @@ export function Storefront() {
             </div>
           )}
         </section>
-        <section id="envios-entregas" className="bg-muted py-16">
+        <section id="como-comprar" className="bg-muted py-16">
           <div className="shell">
             <div className="text-center">
-              <p className="eyebrow text-primary mb-3">Da nossa curadoria para você</p>
-              <h2 className="section-title">Comprar é simples. Encantar-se também.</h2>
+              <p className="eyebrow text-gold mb-3">Da nossa vitrine para você</p>
+              <h2 className="section-title">Comprar na Amora é simples e acolhedor.</h2>
             </div>
             <div className="grid md:grid-cols-3 gap-9 mt-12">
               {[
-                "Escolha suas peças na vitrine",
+                "Escolha seus favoritos na vitrine",
                 "Envie sua sacola pelo WhatsApp",
-                "Combine frete e pagamento",
+                "Retire no Olaria ou receba em casa",
               ].map((t, i) => (
                 <div key={t} className="text-center">
-                  <span className="font-display text-primary text-4xl">0{i + 1}</span>
+                  <span className="font-display text-gold text-4xl">0{i + 1}</span>
                   <h3 className="text-2xl mt-4">{t}</h3>
                   <p className="text-xs text-muted-foreground leading-6 mt-2">
                     {
                       [
-                        "Descubra os detalhes e reúna seus favoritos na sacola.",
-                        "Seu pedido chega prontinho para nosso atendimento.",
-                        "Atendimento personalizado, do pedido até a entrega.",
+                        "Explore semijoias, bolsas para venda ou aluguel e maquiagens a partir de R$ 10.",
+                        `Seu pedido chega prontinho no ${storeContent.whatsappDisplay} para nosso atendimento.`,
+                        "Combine retirada pessoalmente no bairro Olaria, entrega em Timóteo/região ou forma de pagamento.",
                       ][i]
                     }
                   </p>
                 </div>
               ))}
             </div>
-            <div className="grid md:grid-cols-3 gap-8 border-t mt-12 pt-8 text-xs text-muted-foreground">
-              <div>
-                <Truck size={21} className="text-primary mb-3" />
-                <h3 className="text-xl text-foreground">Enviamos para todo o Brasil</h3>
+            <div
+              id="onde-estamos"
+              className="grid md:grid-cols-3 gap-8 border-t mt-12 pt-10 text-xs text-muted-foreground scroll-mt-28"
+            >
+              <div className="rounded-lg bg-background/80 border border-gold-light/60 p-6">
+                <MapPin size={21} className="text-gold mb-3" />
+                <p className="eyebrow text-gold mb-1.5">Onde estamos</p>
+                <h3 className="text-xl text-foreground">Loja física &amp; retirada no Olaria</h3>
+                <p className="text-foreground font-medium mt-3">{storeContent.address}</p>
                 <p className="leading-6 mt-2">
-                  Envio seguro pelos Correios ou transportadora, com código de rastreio para
-                  acompanhar sua encomenda.
+                  Retire seu pedido pessoalmente na loja no bairro Olaria ou solicite entrega em
+                  Timóteo e região.
                 </p>
+                <div className="flex flex-wrap gap-4 mt-4">
+                  <a
+                    href={storeContent.mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline"
+                  >
+                    Ver no mapa <ArrowRight size={12} />
+                  </a>
+                  <a
+                    href={storeContent.whatsapp}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline"
+                  >
+                    {storeContent.whatsappDisplay}
+                  </a>
+                </div>
               </div>
-              <div>
-                <CreditCard size={21} className="text-primary mb-3" />
-                <h3 className="text-xl text-foreground">Pagamento do seu jeito</h3>
+              <div className="rounded-lg bg-background/80 border border-border p-6">
+                <ShoppingBag size={21} className="text-gold mb-3" />
+                <p className="eyebrow text-gold mb-1.5">Eventos &amp; praticidade</p>
+                <h3 className="text-xl text-foreground">Aluguel de bolsas &amp; entregas</h3>
                 <p className="leading-6 mt-2">
-                  Pix ou cartão de crédito. Combinamos todos os detalhes diretamente no atendimento.
+                  Vai a uma festa, casamento ou formatura? Consulte condições e disponibilidade para
+                  aluguel de bolsas e clutches. Também realizamos entregas em Timóteo e região, com
+                  pagamento via Pix ou cartão.
                 </p>
+                <div className="flex flex-wrap gap-4 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => scroll("Aluguel de Bolsas")}
+                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline cursor-pointer"
+                  >
+                    Ver aluguel de bolsas <ArrowRight size={12} />
+                  </button>
+                  <a
+                    href={`${storeContent.whatsapp}?text=${encodeURIComponent("Olá, Amora Acessórios! ✨ Gostaria de consultar condições e disponibilidade para aluguel de bolsas.")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline"
+                  >
+                    Consultar no WhatsApp
+                  </a>
+                </div>
               </div>
-              <div>
-                <ShieldCheck size={21} className="text-primary mb-3" />
-                <h3 className="text-xl text-foreground">Cuidados e garantia</h3>
+              <div className="rounded-lg bg-background/80 border border-border p-6">
+                <ShieldCheck size={21} className="text-gold mb-3" />
+                <p className="eyebrow text-gold mb-1.5">Informações úteis</p>
+                <h3 className="text-xl text-foreground">Cuidados e dúvidas</h3>
                 {[
-                  "Como cuidar da Prata 925?",
-                  "Como cuidar das Semijoias?",
-                  "Sobre a garantia",
+                  "Como funciona o aluguel de bolsas?",
+                  "Como cuidar das Semijoias e Prata 925?",
+                  "Formas de pagamento e retirada",
                 ].map((q, i) => (
-                  <details key={q} className="border-b py-3">
-                    <summary className="cursor-pointer">{q}</summary>
+                  <details key={q} className="border-b last:border-b-0 py-3">
+                    <summary className="cursor-pointer text-foreground/90 font-medium">{q}</summary>
                     <p className="leading-6 mt-2">
                       {
                         [
-                          "Limpe com flanela macia e guarde em local seco, separada de outras peças.",
-                          "Evite perfumes, produtos químicos, banho e piscina. Guarde cada peça individualmente.",
-                          "Consulte as condições e os prazos de cada peça em nosso atendimento pelo WhatsApp.",
+                          `Escolha seu modelo favorito e fale conosco pelo WhatsApp ${storeContent.whatsappDisplay} para confirmar datas, valores e retirada na loja.`,
+                          "Evite contato com perfumes, cremes, banho e piscina. Limpe com flanela macia e guarde cada peça separadamente.",
+                          `Aceitamos Pix e cartão. Você pode retirar na ${storeContent.address} ou combinar entrega em Timóteo e região.`,
                         ][i]
                       }
                     </p>
@@ -579,56 +643,71 @@ export function Storefront() {
           </div>
         </section>
         <section id="sobre" className="shell py-20 text-center max-w-3xl">
-          <Sparkles className="mx-auto text-primary mb-5" size={25} />
-          <p className="eyebrow text-primary mb-3">Nossa essência</p>
-          <h2 className="section-title">Mais que acessórios, um pouco de você.</h2>
+          <Sparkles className="mx-auto text-gold mb-5" size={25} />
+          <p className="eyebrow text-gold mb-3">Nossa essência</p>
+          <h2 className="section-title">Elegância nos detalhes que acompanham você.</h2>
           <p className="text-sm text-muted-foreground leading-8 mt-6">{storeContent.about}</p>
           <a
-            href="https://instagram.com/echileyvasconcelos"
+            href={storeContent.instagram}
             target="_blank"
             rel="noreferrer"
-            className="block font-display italic text-2xl mt-6"
+            className="inline-block font-display italic text-2xl text-primary hover:text-gold transition-colors mt-6"
           >
-            Com carinho, Echiley
+            Com carinho, {storeContent.name} · {storeContent.instagramHandle}
           </a>
         </section>
       </main>
-      <footer className="bg-secondary/60 border-t pt-10 pb-24 md:pb-8">
+      <footer className="bg-secondary/75 border-t border-border pt-10 pb-24 md:pb-8">
         <div className="shell grid md:grid-cols-[1fr_1fr_1fr] gap-6 items-center">
           <div>
-            <img
-              src="/logo.png"
-              alt="Use Camile Acessórios"
-              className="h-12 sm:h-14 w-auto object-contain"
-            />
-            <p className="text-[11px] text-muted-foreground mt-3">Seu estilo merece esse brilho.</p>
+            <BrandLogo size="md" />
+            <p className="text-[11px] text-muted-foreground mt-3">{storeContent.subtitle}</p>
           </div>
-          <div className="text-xs text-muted-foreground md:text-center leading-7">
-            Loja 100% Online
-            <br />
-            Enviamos para todo o Brasil
-          </div>
-          <div className="flex md:justify-end gap-3">
-            <Button variant="ghost" size="icon" asChild>
-              <a
-                href={storeContent.instagram}
-                aria-label="Instagram"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Instagram />
-              </a>
-            </Button>
-            <Button variant="ghost" size="icon" asChild>
+          <div className="text-xs text-muted-foreground md:text-center leading-6 space-y-1">
+            <p className="text-foreground font-medium">{storeContent.address}</p>
+            <p>Retirada na loja · Entregas em Timóteo e região</p>
+            <p>
               <a
                 href={storeContent.whatsapp}
-                aria-label="WhatsApp"
                 target="_blank"
                 rel="noreferrer"
+                className="transition-colors hover:text-primary"
               >
-                <MessageCircle />
+                WhatsApp: {storeContent.whatsappDisplay}
               </a>
-            </Button>
+            </p>
+          </div>
+          <div className="flex flex-col md:items-end gap-2">
+            <div className="flex md:justify-end gap-2">
+              <Button variant="ghost" size="icon" asChild>
+                <a
+                  href={storeContent.instagram}
+                  aria-label={`Instagram ${storeContent.instagramHandle}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Instagram />
+                </a>
+              </Button>
+              <Button variant="ghost" size="icon" asChild>
+                <a
+                  href={storeContent.whatsapp}
+                  aria-label={`WhatsApp ${storeContent.whatsappDisplay}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <MessageCircle />
+                </a>
+              </Button>
+            </div>
+            <a
+              href={storeContent.instagram}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
+            >
+              {storeContent.instagramHandle}
+            </a>
           </div>
         </div>
         <div className="shell mt-8 pt-5 border-t">
@@ -639,13 +718,13 @@ export function Storefront() {
                 href="https://instagram.com/ryan.devbr"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="transition-colors hover:text-[#C91E7C]"
+                className="transition-colors hover:text-primary"
               >
                 @ryan.devbr
               </a>
             </p>
             <p className="order-1 md:order-2 md:text-center md:justify-self-center">
-              © 2026 Use Camile Acessórios. Todos os direitos reservados.
+              © 2026 {storeContent.name}. Todos os direitos reservados.
             </p>
             <Link
               to="/login"
@@ -716,7 +795,7 @@ export function Storefront() {
                       if (product.in_stock) add(product);
                       else
                         window.open(
-                          `${storeContent.whatsapp}?text=${encodeURIComponent(`Olá! Gostaria de ser avisada quando ${product.name} estiver disponível.`)}`,
+                          `${storeContent.whatsapp}?text=${encodeURIComponent(`Olá, Amora Acessórios! ✨ Gostaria de ser avisada quando ${product.name} estiver disponível.`)}`,
                           "_blank",
                         );
                     }}
@@ -744,7 +823,7 @@ export function Storefront() {
             Sua sacola <span className="text-primary">({count})</span>
           </DialogTitle>
           <DialogDescription className="text-xs mt-2">
-            Um brilho especial está a caminho.
+            Retirada no Olaria, Timóteo ou entrega combinada no WhatsApp.
           </DialogDescription>
           <div className="flex-1 overflow-y-auto min-h-0 py-5">
             {!cart.length ? (
@@ -890,8 +969,12 @@ export function Storefront() {
                       <input value={name} onChange={(e) => setName(e.target.value)} />
                     </label>
                     <label>
-                      CEP ou Cidade/UF (opcional)
-                      <input value={city} onChange={(e) => setCity(e.target.value)} />
+                      Bairro / Cidade ou Retirada na loja (opcional)
+                      <input
+                        placeholder="Ex.: Retirar no Olaria ou Timóteo - MG"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                      />
                     </label>
                   </div>
                 </div>
@@ -915,7 +998,7 @@ export function Storefront() {
                 <span>{money(total)}</span>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Frete calculado no atendimento pelo WhatsApp
+                Retirada na loja (Olaria, Timóteo) ou entrega combinada pelo WhatsApp
               </p>
               <Button size="lg" className="w-full text-xs" onClick={checkout}>
                 <MessageCircle />

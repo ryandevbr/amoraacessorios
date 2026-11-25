@@ -1,6 +1,6 @@
 import { isSupabaseConfigured, requireSupabase, supabase } from "@/lib/supabase";
 
-const DEMO_SESSION_KEY = "camile-demo";
+const DEMO_SESSION_KEY = "amora-demo";
 
 export interface AuthState {
   authenticated: boolean;

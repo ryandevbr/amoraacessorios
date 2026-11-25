@@ -11,8 +11,8 @@ export interface CatalogOption {
   created_at: string;
 }
 
-const STORAGE_KEY = "use-camile-catalog-options-v1";
-const OPTIONS_EVENT = "camile-catalog-options";
+const STORAGE_KEY = "amora-acessorios-catalog-options-v1";
+const OPTIONS_EVENT = "amora-catalog-options";
 
 export function normalizeOptionName(name: string): string {
   return name.trim().replace(/\s+/g, " ");

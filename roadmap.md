@@ -1,4 +1,4 @@
-# Use Camile
+# Amora Acessórios
 - [x] Vitrine editorial, filtros e detalhes compartilháveis
 - [x] Sacola, cupons e pedido pelo WhatsApp
 - [x] Painel local de produtos, banners, avisos e cupons

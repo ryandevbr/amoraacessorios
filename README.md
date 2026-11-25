@@ -1,6 +1,6 @@
-# Use Camile Acessórios
+# Amora Acessórios
 
-Vitrine online da **Use Camile Acessórios** (Prata 925 e Semijoias), com catálogo filtrável, detalhes compartilháveis de peças, sacola de compras, aplicação de cupons, finalização de pedido via WhatsApp e painel administrativo.
+Vitrine online da **Amora Acessórios** (Semijoias, Bolsas & Maquiagens — Olaria, Timóteo - MG), com catálogo filtrável, detalhes compartilháveis de peças, sacola de compras, aplicação de cupons, finalização de pedido via WhatsApp e painel administrativo com preenchimento assistido por IA.
 
 ## Stack utilizada
 

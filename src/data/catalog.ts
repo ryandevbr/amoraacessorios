@@ -1,16 +1,3 @@
-import p1 from "@/assets/product-1.asset.json";
-import p2 from "@/assets/product-2.asset.json";
-import p3 from "@/assets/product-3.asset.json";
-import p4 from "@/assets/product-4.asset.json";
-import p5 from "@/assets/product-5.asset.json";
-import p6 from "@/assets/product-6.asset.json";
-import p7 from "@/assets/product-7.asset.json";
-import p8 from "@/assets/product-8.asset.json";
-import p9 from "@/assets/product-9.asset.json";
-import p10 from "@/assets/product-10.asset.json";
-import p11 from "@/assets/product-11.asset.json";
-import p12 from "@/assets/product-12.asset.json";
-import editorial from "@/assets/editorial.asset.json";
 export interface ProductCharacteristic {
   attribute: string;
   value: string;
@@ -75,61 +62,243 @@ export const emptyStoreData: StoreData = {
   announcement: { active: false, text: "", link: "#vitrine" },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
-const names = [
-  "Argola Dourada Essencial",
-  "Colar Coração em Prata",
-  "Colar Duplo Pérola",
-  "Anel Solitário em Prata",
-  "Pulseira Riviera Dourada",
-  "Argola Delicada em Prata",
-  "Colar Sol Dourado",
-  "Pulseira Coração em Prata",
-  "Brinco Pérola Clássica",
-  "Anel Abraço em Prata",
-  "Conjunto Pérola Dourado",
-  "Colar Estrela em Prata",
-];
-const categories = [
-  "Brincos",
-  "Colares",
-  "Colares",
-  "Anéis",
-  "Pulseiras",
-  "Brincos",
-  "Colares",
-  "Pulseiras",
-  "Brincos",
-  "Anéis",
-  "Conjuntos",
-  "Colares",
-];
-const prices = [69.9, 89.9, 119.9, 99.9, 149.9, 59.9, 79.9, 89.9, 39.9, 69.9, 189.9, 99.9];
-const photos = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12];
-export const initialData: StoreData = {
-  products: names.map((name, i) => ({
-    id: `camile-${i + 1}`,
-    name,
-    sku: `UC${String(i + 1).padStart(3, "0")}`,
-    category: categories[i] ?? "Colares",
-    material: [1, 3, 5, 7, 9, 11].includes(i) ? "Prata 925" : "Semijoia",
-    price: prices[i] ?? 69.9,
-    sale_price: Number(((prices[i] ?? 69.9) * 0.8).toFixed(2)),
-    is_on_sale: [0, 4, 10].includes(i),
-    sale_label: "",
-    image_url: photos[i]?.url ?? p1.url,
+
+function makeEditorialPlaceholder(
+  tag: string,
+  title: string,
+  variant: "plum" | "champagne" | "ivory" = "champagne",
+  dimensions: { width: number; height: number } = { width: 800, height: 1000 },
+): string {
+  const bg = variant === "plum" ? "#4A192C" : variant === "ivory" ? "#FCF9F5" : "#F3ECE2";
+  const accent = variant === "plum" ? "#D8BC94" : "#B88B58";
+  const text = variant === "plum" ? "#FCF9F5" : "#24161B";
+  const sub = variant === "plum" ? "#D8BC94" : "#69565C";
+  const { width, height } = dimensions;
+  const cx = width / 2;
+  const cy = height / 2 - 24;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <rect width="100%" height="100%" fill="${bg}"/>
+    <rect x="28" y="28" width="${width - 56}" height="${height - 56}" fill="none" stroke="${accent}" stroke-opacity="0.38" stroke-width="1.5"/>
+    <g transform="translate(${cx - 36}, ${cy - 68})">
+      <path d="M36 60L6 26L17 11L28 7.5L36 14L44 7.5L55 11L66 26L36 60Z" fill="none" stroke="${accent}" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M6 26H66M17 11L22.5 26L36 60L49.5 26L55 11M36 14L22.5 26M36 14L49.5 26" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linejoin="round"/>
+    </g>
+    <text x="${cx}" y="${cy + 36}" text-anchor="middle" font-family="Georgia, serif" font-size="24" letter-spacing="6" fill="${accent}">AMORA</text>
+    <text x="${cx}" y="${cy + 70}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" letter-spacing="3" fill="${sub}">${tag.toUpperCase()}</text>
+    <text x="${cx}" y="${cy + 106}" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="${text}">${title}</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+interface DemoSeedItem {
+  name: string;
+  category: string;
+  material: string;
+  price: number;
+  is_on_sale?: boolean;
+  featured?: boolean;
+  in_stock?: boolean;
+  description: string;
+  variant: "plum" | "champagne" | "ivory";
+  characteristics: ProductCharacteristic[];
+}
+
+const demoItems: DemoSeedItem[] = [
+  {
+    name: "Argola Cravejada Dourada",
+    category: "Brincos",
+    material: "Semijoia",
+    price: 69.9,
+    is_on_sale: true,
+    featured: true,
+    variant: "champagne",
     description:
-      "Um toque de delicadeza para acompanhar seus melhores momentos. Uma peça selecionada com carinho, perfeita para compor looks e presentear alguém especial.",
-    active: true,
-    featured: i < 4,
-    in_stock: i !== 9,
+      "Argola sofisticada com brilho delicado que ilumina qualquer produção. Perfeita para compor looks do dia a dia ou eventos especiais.",
     characteristics: [
-      {
-        attribute: "Material",
-        value: [1, 3, 5, 7, 9, 11].includes(i) ? "Prata 925" : "Banho de ouro 18k",
-      },
-      { attribute: "Acabamento", value: "Polido" },
-      { attribute: "Detalhes", value: "Design delicado" },
+      { attribute: "Acabamento", value: "Banho dourado polido" },
+      { attribute: "Pedra", value: "Zircônias cravejadas" },
+      { attribute: "Estilo", value: "Clássico atemporal" },
     ],
+  },
+  {
+    name: "Clutch Festa Dourada Champanhe",
+    category: "Aluguel de Bolsas",
+    material: "Aluguel",
+    price: 59.9,
+    featured: true,
+    variant: "plum",
+    description:
+      "Clutch estruturada em tom champanhe perfeita para casamentos, formaturas e festas. Consulte disponibilidade de datas pelo WhatsApp.",
+    characteristics: [
+      { attribute: "Modalidade", value: "Aluguel para eventos" },
+      { attribute: "Cor", value: "Dourado champanhe" },
+      { attribute: "Alça", value: "Corrente removível" },
+    ],
+  },
+  {
+    name: "Gloss Labial Brilho Espelhado",
+    category: "Maquiagens",
+    material: "Maquiagem",
+    price: 14.9,
+    featured: true,
+    variant: "ivory",
+    description:
+      "Textura confortável com brilho espelhado e toque hidratante para realçar os lábios em segundos. Ideal para levar sempre na bolsa.",
+    characteristics: [
+      { attribute: "Tipo", value: "Gloss labial" },
+      { attribute: "Acabamento", value: "Espelhado luminoso" },
+      { attribute: "Uso", value: "Dia a dia e eventos" },
+    ],
+  },
+  {
+    name: "Bolsa Tiracolo Estruturada Nude",
+    category: "Bolsas",
+    material: "Bolsa",
+    price: 159.9,
+    featured: true,
+    variant: "champagne",
+    description:
+      "Design moderno e estruturado com ferragens douradas e ótimo espaço interno. Versátil para transitar do trabalho ao jantar com elegância.",
+    characteristics: [
+      { attribute: "Modelo", value: "Tiracolo estruturada" },
+      { attribute: "Cor", value: "Nude champanhe" },
+      { attribute: "Detalhes", value: "Ferragens douradas" },
+    ],
+  },
+  {
+    name: "Colar Ponto de Luz em Prata",
+    category: "Colares",
+    material: "Prata 925",
+    price: 89.9,
+    variant: "ivory",
+    description:
+      "Corrente delicada em Prata 925 com pingente ponto de luz que garante brilho sutil e feminino em todas as ocasiões.",
+    characteristics: [
+      { attribute: "Material", value: "Prata 925" },
+      { attribute: "Acabamento", value: "Polido" },
+      { attribute: "Estilo", value: "Minimalista delicado" },
+    ],
+  },
+  {
+    name: "Pulseira Riviera Dourada",
+    category: "Pulseiras",
+    material: "Semijoia",
+    price: 129.9,
+    is_on_sale: true,
+    variant: "champagne",
+    description:
+      "Clássica pulseira riviera cravejada para elevar qualquer combinação de pulsos com sofisticação e brilho intenso.",
+    characteristics: [
+      { attribute: "Acabamento", value: "Banho dourado" },
+      { attribute: "Pedra", value: "Zircônias cristal" },
+      { attribute: "Ocasião", value: "Social e festa" },
+    ],
+  },
+  {
+    name: "Paleta de Sombras Tons Terrosos",
+    category: "Maquiagens",
+    material: "Maquiagem",
+    price: 29.9,
+    variant: "ivory",
+    description:
+      "Cores versáteis entre opacos aveludados e cintilantes dourados para criar desde makes suaves até esfumados marcantes.",
+    characteristics: [
+      { attribute: "Tipo", value: "Paleta de sombras" },
+      { attribute: "Acabamento", value: "Matte e cintilante" },
+      { attribute: "Paleta", value: "Tons neutros e dourados" },
+    ],
+  },
+  {
+    name: "Anel Solitário em Prata 925",
+    category: "Anéis",
+    material: "Prata 925",
+    price: 94.9,
+    variant: "champagne",
+    description:
+      "Anel solitário de linhas delicadas com zircônia central luminosa. Uma peça coringa para usar sozinha ou em mix de anéis.",
+    characteristics: [
+      { attribute: "Material", value: "Prata 925" },
+      { attribute: "Pedra", value: "Zircônia solitária" },
+      { attribute: "Estilo", value: "Romântico clássico" },
+    ],
+  },
+  {
+    name: "Clutch Pérolas Noiva & Festa",
+    category: "Aluguel de Bolsas",
+    material: "Aluguel",
+    price: 69.9,
+    variant: "plum",
+    description:
+      "Peça sofisticada com acabamento perolado e fecho joia dourado, pensada para madrinhas, formandas e convidadas especiais.",
+    characteristics: [
+      { attribute: "Modalidade", value: "Aluguel para festas" },
+      { attribute: "Acabamento", value: "Perolado com fecho dourado" },
+      { attribute: "Ocasião", value: "Casamentos e gala" },
+    ],
+  },
+  {
+    name: "Anel Orgânico Banhado a Ouro",
+    category: "Anéis",
+    material: "Semijoia",
+    price: 74.9,
+    in_stock: false,
+    variant: "champagne",
+    description:
+      "Design autoral de curvas orgânicas e brilho espelhado para compor produções modernas e cheias de personalidade.",
+    characteristics: [
+      { attribute: "Acabamento", value: "Dourado espelhado" },
+      { attribute: "Design", value: "Formas orgânicas" },
+      { attribute: "Estilo", value: "Contemporâneo" },
+    ],
+  },
+  {
+    name: "Conjunto Pérola Clássico",
+    category: "Conjuntos",
+    material: "Semijoia",
+    price: 189.9,
+    is_on_sale: true,
+    variant: "plum",
+    description:
+      "Colar e brincos harmonizados com pérolas delicadas e banho dourado impecável — escolha certeira para presentear ou brilhar em eventos.",
+    characteristics: [
+      { attribute: "Composição", value: "Colar + par de brincos" },
+      { attribute: "Detalhe", value: "Pérolas clássicas" },
+      { attribute: "Acabamento", value: "Banho dourado" },
+    ],
+  },
+  {
+    name: "Blush Compacto Aveludado",
+    category: "Maquiagens",
+    material: "Maquiagem",
+    price: 10.0,
+    variant: "ivory",
+    description:
+      "Textura fina e fácil de esfumar que devolve o ar saudável às maçãs do rosto com acabamento natural e longa duração.",
+    characteristics: [
+      { attribute: "Tipo", value: "Blush compacto" },
+      { attribute: "Acabamento", value: "Aveludado natural" },
+      { attribute: "Diferencial", value: "Linha make a partir de R$ 10" },
+    ],
+  },
+];
+
+export const initialData: StoreData = {
+  products: demoItems.map((item, i) => ({
+    id: `amora-${i + 1}`,
+    name: item.name,
+    sku: `AM${String(i + 1).padStart(3, "0")}`,
+    category: item.category,
+    material: item.material,
+    price: item.price,
+    sale_price: Number((item.price * 0.8).toFixed(2)),
+    is_on_sale: Boolean(item.is_on_sale),
+    sale_label: "",
+    image_url: makeEditorialPlaceholder(item.category, item.name, item.variant),
+    description: item.description,
+    active: true,
+    featured: Boolean(item.featured),
+    in_stock: item.in_stock ?? true,
+    characteristics: item.characteristics,
   })),
   coupons: [
     {
@@ -144,7 +313,7 @@ export const initialData: StoreData = {
     },
     {
       id: "fixed",
-      code: "USECAMILE15",
+      code: "AMORA15",
       type: "fixed",
       value: 15,
       min_order_value: 120,
@@ -156,42 +325,66 @@ export const initialData: StoreData = {
   banners: [
     {
       id: "b1",
-      image_url: editorial.url,
-      alt: "Colares delicados e anéis dourados em uma composição editorial",
+      image_url: makeEditorialPlaceholder(
+        "Semijoias, Bolsas & Maquiagens",
+        "Curadoria Amora Acessórios",
+        "plum",
+        { width: 1600, height: 900 },
+      ),
+      alt: "Banner Amora Acessórios — Semijoias, bolsas e maquiagens",
       active: true,
       filter: "",
     },
     {
       id: "b2",
-      image_url: p11.url,
-      alt: "Conjunto de pérolas dourado",
+      image_url: makeEditorialPlaceholder(
+        "Venda e Aluguel de Bolsas",
+        "Clutches & Bolsas para Festas",
+        "champagne",
+        { width: 1600, height: 900 },
+      ),
+      alt: "Banner Amora Acessórios — Aluguel de Bolsas",
       active: true,
-      filter: "Semijoias",
+      filter: "Aluguel de Bolsas",
     },
     {
       id: "b3",
-      image_url: p2.url,
-      alt: "Colar coração em Prata 925",
+      image_url: makeEditorialPlaceholder(
+        "Makes a partir de R$ 10",
+        "Beleza para todos os momentos",
+        "ivory",
+        { width: 1600, height: 900 },
+      ),
+      alt: "Banner Amora Acessórios — Maquiagens",
       active: true,
-      filter: "Prata 925",
+      filter: "Maquiagens",
     },
   ],
   announcement: {
     active: true,
-    text: "Sua primeira compra merece um brilho extra: 10% OFF com PRIMEIRACOMPRA",
+    text: "Semijoias, bolsas & maquiagens ✨ Use o cupom PRIMEIRACOMPRA e ganhe 10% OFF",
     link: "#vitrine",
   },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
 export const DEFAULT_CATEGORIES = [
+  "Semijoias",
+  "Bolsas",
+  "Aluguel de Bolsas",
+  "Maquiagens",
   "Anéis",
   "Colares",
   "Brincos",
   "Pulseiras",
-  "Tornozeleiras",
   "Conjuntos",
 ] as const;
-export const DEFAULT_MATERIALS = ["Prata 925", "Semijoia"] as const;
+export const DEFAULT_MATERIALS = [
+  "Semijoia",
+  "Prata 925",
+  "Bolsa",
+  "Aluguel",
+  "Maquiagem",
+] as const;
 export const categoriesList: string[] = [...DEFAULT_CATEGORIES];
 export const materialsList: string[] = [...DEFAULT_MATERIALS];
 export const money = (n: number) =>

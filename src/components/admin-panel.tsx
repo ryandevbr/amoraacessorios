@@ -19,6 +19,7 @@ import {
   Save,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useStore } from "@/services/storeService";
@@ -280,7 +281,9 @@ export function AdminPanel() {
         };
       });
 
-      toast.success("Campos preenchidos com IA! Revise o material e informe o preço.");
+      toast.success(
+        "Campos preenchidos com IA! Revise a categoria, o material/linha e informe o preço.",
+      );
     } catch (err) {
       if (sessionId !== productModalSessionRef.current) return;
       toast.error(err instanceof Error ? err.message : "Erro ao analisar a peça com IA.");
@@ -396,9 +399,9 @@ export function AdminPanel() {
     setSizeInfo("");
     setInlineOptionType(null);
     setInlineOptionValue("");
-    const defaultCategory = categoryNames.includes("Brincos")
-      ? "Brincos"
-      : (categoryNames[0] ?? "Brincos");
+    const defaultCategory = categoryNames.includes("Semijoias")
+      ? "Semijoias"
+      : (categoryNames[0] ?? "Semijoias");
     const defaultMaterial = materialNames.includes("Semijoia")
       ? "Semijoia"
       : (materialNames[0] ?? "Semijoia");
@@ -465,11 +468,7 @@ export function AdminPanel() {
     <main className="min-h-screen bg-background">
       <header className="border-b">
         <div className="shell h-17 md:h-20 flex items-center justify-between gap-3">
-          <img
-            src="/logo.png"
-            alt="Use Camile Acessórios"
-            className="h-11 sm:h-12 md:h-14 w-auto shrink-0 object-contain"
-          />
+          <BrandLogo size="sm" />
           <div className="flex gap-2 shrink-0">
             <Button
               variant="ghost"
@@ -794,7 +793,7 @@ export function AdminPanel() {
                     id: crypto.randomUUID(),
                     image_url: "",
                     mobile_image_url: "",
-                    alt: "Banner Use Camile Acessórios",
+                    alt: "Banner Amora Acessórios",
                     active: true,
                     filter: "",
                     display_order: data.banners.length,
@@ -812,7 +811,7 @@ export function AdminPanel() {
               >
                 <img
                   src={b.image_url}
-                  alt={b.alt || "Banner Use Camile Acessórios"}
+                  alt={b.alt || "Banner Amora Acessórios"}
                   className="w-full h-20 object-cover"
                 />
                 <div>
@@ -1114,7 +1113,7 @@ export function AdminPanel() {
                         type="text"
                         aria-label="Nova categoria"
                         className="text-base h-10"
-                        placeholder="Ex.: Tornozeleiras"
+                        placeholder="Ex.: Clutches, Nécessaires"
                         value={inlineOptionValue}
                         onChange={(e) => setInlineOptionValue(e.target.value)}
                         onKeyDown={(e) => {
@@ -1632,7 +1631,7 @@ export function AdminPanel() {
                   try {
                     await saveBanner({
                       ...banner,
-                      alt: banner.alt.trim() || "Banner Use Camile Acessórios",
+                      alt: banner.alt.trim() || "Banner Amora Acessórios",
                     });
                     cleanupPendingUploads([banner.image_url, banner.mobile_image_url ?? ""]);
                     setBanner(null);

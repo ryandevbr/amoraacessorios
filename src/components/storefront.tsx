@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -17,6 +17,9 @@ import {
   Check,
   Heart,
   X,
+  Gift,
+  Users,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand-logo";
@@ -29,8 +32,19 @@ import {
   useCatalogOptions,
 } from "@/services/catalogOptionsService";
 import { calculateCoupon, normalizeCode, type CartItem } from "@/services/couponService";
-import { money, priceOf, type Product } from "@/data/catalog";
-import { storeContent } from "@/data/storeContent";
+import {
+  buildRentWhatsAppMessage,
+  getTodayLocalIsoDate,
+  isRentProduct,
+  money,
+  priceOf,
+  type Product,
+} from "@/data/catalog";
+import {
+  getConsultoriaCampaignStatus,
+  PROMO_WHATSAPP_QUESTION,
+  storeContent,
+} from "@/data/storeContent";
 
 function matchesFilter(product: Product, selected: string): boolean {
   if (selected === "Todos") return true;
@@ -41,8 +55,13 @@ function matchesFilter(product: Product, selected: string): boolean {
   if (target === "semijoias" && productMaterial === "semijoia") return true;
   if (target === "bolsas" && productMaterial === "bolsa") return true;
   if (target === "maquiagens" && productMaterial === "maquiagem") return true;
-  if (target === "aluguel de bolsas" && productMaterial === "aluguel") return true;
-  if (target === "aluguel" && productCategory === "aluguel de bolsas") return true;
+  if (target === "aluguel de bolsas" && (productMaterial === "aluguel" || isRentProduct(product)))
+    return true;
+  if (
+    target === "aluguel" &&
+    (productCategory === "aluguel de bolsas" || isRentProduct(product))
+  )
+    return true;
   return productCategory === target || productMaterial === target;
 }
 
@@ -83,7 +102,11 @@ export function Storefront() {
   const [applied, setApplied] = useState("");
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
+  const [rentDate, setRentDate] = useState("");
+  const [rentName, setRentName] = useState("");
+  const rentDateInputRef = useRef<HTMLInputElement>(null);
   const [slide, setSlide] = useState(0);
+  const todayIso = getTodayLocalIsoDate();
   useEffect(() => {
     try {
       setCart(JSON.parse(localStorage.getItem("amora-bag") ?? "[]"));
@@ -117,13 +140,14 @@ export function Storefront() {
   }, [banners.length]);
   function open(p: Product | null) {
     setProduct(p);
+    setRentDate("");
     const url = new URL(window.location.href);
     if (p) url.searchParams.set("produto", p.id);
     else url.searchParams.delete("produto");
     window.history.replaceState({}, "", url);
   }
   function add(p: Product) {
-    if (!p.in_stock) return;
+    if (!p.in_stock || isRentProduct(p)) return;
     setCart((c) => {
       const old = c.find((i) => i.product.id === p.id);
       return old
@@ -131,6 +155,25 @@ export function Storefront() {
         : [...c, { product: p, quantity: 1 }];
     });
     toast.success("Peça adicionada à sacola");
+  }
+  function handleConsultRent(p: Product) {
+    if (!rentDate) {
+      toast.error("Selecione a data do evento para consultar a disponibilidade.");
+      rentDateInputRef.current?.focus();
+      return;
+    }
+    const productUrl = `${window.location.origin}/?produto=${p.id}`;
+    const message = buildRentWhatsAppMessage({
+      product: p,
+      eventDateIso: rentDate,
+      customerName: rentName,
+      productUrl,
+    });
+    window.open(
+      `${storeContent.whatsapp}?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   }
   const activeProducts = data.products.filter((p) => p.active);
   const dynamicMaterials = mergeOptionValues(
@@ -168,6 +211,8 @@ export function Storefront() {
   const discount = applied && !totals.error ? totals.discount : 0;
   const total = subtotal - discount;
   const count = cart.reduce((s, i) => s + i.quantity, 0);
+  const promoCampaignActive = data.announcement.promo_campaign_active ?? true;
+  const promoStatus = getConsultoriaCampaignStatus(total);
   const scroll = (f: string) => {
     const targetKey = optionLookupKey(f);
     const matched =
@@ -208,6 +253,7 @@ export function Storefront() {
           ]
         : []),
       `Total estimado: ${money(total)}`,
+      ...(promoCampaignActive && promoStatus.checkoutLine ? [promoStatus.checkoutLine] : []),
       "",
       ...(name ? [`Nome: ${name}`] : []),
       ...(city ? [`Bairro/Cidade ou Retirada: ${city}`] : []),
@@ -224,8 +270,17 @@ export function Storefront() {
     <>
       {data.announcement.active && data.announcement.text.trim() && (
         <div className="bg-primary text-primary-foreground text-center px-4 py-2.5 text-[10px] sm:text-xs">
-          <a href={data.announcement.link || "#vitrine"} className="inline-flex gap-2 items-center">
-            <Sparkles size={12} className="text-gold-light shrink-0" />
+          <a
+            href={
+              !promoCampaignActive && data.announcement.link === "#promocao"
+                ? "#vitrine"
+                : data.announcement.link || "#vitrine"
+            }
+            className="inline-flex gap-2 items-center"
+          >
+            {!data.announcement.text.trim().startsWith("✨") && (
+              <Sparkles size={12} className="text-gold-light shrink-0" />
+            )}
             <span>{data.announcement.text}</span>
           </a>
         </div>
@@ -389,6 +444,98 @@ export function Storefront() {
             })}
           </div>
         </div>
+        {promoCampaignActive && (
+          <section id="promocao" className="shell pt-12 md:pt-16 scroll-mt-24">
+            <div className="relative overflow-hidden rounded-2xl bg-primary text-primary-foreground border border-gold/45 shadow-sm px-6 py-10 sm:px-10 sm:py-12 md:px-14 md:py-14">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-3 sm:inset-4 rounded-xl border border-gold-light/20"
+              />
+              <div className="relative max-w-4xl mx-auto text-center">
+                <p className="inline-flex items-center gap-2 rounded-full border border-gold-light/45 bg-primary-hover/70 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-gold-light">
+                  <Sparkles size={12} className="text-gold-light shrink-0" />
+                  CAMPANHA ESPECIAL DA SEMANA
+                </p>
+                <h2 className="font-display text-3xl sm:text-4xl md:text-[42px] leading-[1.15] text-primary-foreground mt-5 max-w-3xl mx-auto">
+                  Já pensou em aprender a escolher os produtos certos para você e ainda descobrir
+                  como se maquiar sozinha?
+                </h2>
+                <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mt-8 sm:mt-10 text-left">
+                  <div className="rounded-xl bg-background text-foreground border border-gold-light/70 p-6 sm:p-7 flex flex-col justify-between shadow-xs">
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">
+                          Opção 1
+                        </span>
+                        <span className="rounded-full bg-secondary border border-gold-light/70 px-3 py-1 text-[11px] font-semibold text-primary">
+                          A partir de R$ 150
+                        </span>
+                      </div>
+                      <h3 className="text-2xl text-primary mt-3 flex items-center gap-2">
+                        <Gift size={18} className="text-gold shrink-0" />
+                        Compra Individual
+                      </h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground leading-6 mt-3">
+                        Nas compras a partir de <strong className="text-foreground">R$ 150</strong>{" "}
+                        em qualquer produto da loja, você ganha uma{" "}
+                        <strong className="text-primary">consultoria exclusiva</strong> para
+                        aprender a escolher os produtos certos e se maquiar sozinha.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-secondary text-foreground border border-gold/65 p-6 sm:p-7 flex flex-col justify-between shadow-xs">
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">
+                          Opção 2
+                        </span>
+                        <span className="rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground">
+                          R$ 100 cada · Em dupla
+                        </span>
+                      </div>
+                      <h3 className="text-2xl text-primary mt-3 flex items-center gap-2">
+                        <Users size={18} className="text-gold shrink-0" />
+                        Veio com uma Amiga?
+                      </h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground leading-6 mt-3">
+                        Se cada uma comprar a partir de{" "}
+                        <strong className="text-foreground">R$ 100</strong>,{" "}
+                        <strong className="text-primary">as duas ganham</strong> a consultoria de
+                        automaquiagem!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 mt-8 sm:mt-10">
+                  <Button
+                    size="lg"
+                    className="bg-gold-light text-foreground hover:bg-background hover:text-primary font-semibold shadow-sm"
+                    onClick={() =>
+                      document.getElementById("vitrine")?.scrollIntoView({ behavior: "smooth" })
+                    }
+                  >
+                    Escolher minhas peças <ArrowRight />
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="border border-gold-light/45 text-primary-foreground hover:bg-primary-hover hover:text-gold-light"
+                    asChild
+                  >
+                    <a
+                      href={`${storeContent.whatsapp}?text=${encodeURIComponent(PROMO_WHATSAPP_QUESTION)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <MessageCircle />
+                      Tirar dúvidas no WhatsApp
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
         <section id="vitrine" className="shell pt-16 pb-20">
           <div className="text-center">
             <p className="eyebrow text-gold mb-3">Curadoria Amora Acessórios</p>
@@ -437,68 +584,93 @@ export function Storefront() {
             </select>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-10">
-            {visibleProducts.map((p) => (
-              <article key={p.id}>
-                <div className="product-image">
+            {visibleProducts.map((p) => {
+              const isRent = isRentProduct(p);
+              return (
+                <article key={p.id}>
+                  <div className="product-image">
+                    <Button
+                      variant="ghost"
+                      className="w-full h-full p-0 rounded-none"
+                      onClick={() => open(p)}
+                      aria-label={`Ver ${p.name}`}
+                    >
+                      <img
+                        src={p.image_url}
+                        alt={`${p.name} — ${p.material}`}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </Button>
+                    <div className="absolute top-3 left-3 flex flex-col items-start gap-1.5 pointer-events-none">
+                      {isRent && (
+                        <span className="bg-primary text-primary-foreground px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider">
+                          ALUGUEL
+                        </span>
+                      )}
+                      {p.is_on_sale ? (
+                        <span className="bg-primary text-primary-foreground px-2 py-1 text-[9px] uppercase tracking-wide">
+                          {p.sale_label || `${((1 - p.sale_price / p.price) * 100).toFixed(0)}% OFF`}
+                        </span>
+                      ) : p.featured ? (
+                        <span className="bg-background/95 text-primary border border-gold-light/70 px-2 py-1 text-[9px] uppercase tracking-wide">
+                          Destaque
+                        </span>
+                      ) : null}
+                      {!p.in_stock && (
+                        <span className="bg-foreground text-background px-2 py-1 text-[9px]">
+                          Indisponível
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-sm px-2 py-1 text-[9px] font-medium tracking-wide shadow-xs ${getMaterialBadgeClass(p.material)}`}
+                    >
+                      {p.material}
+                    </span>
+                  </div>
                   <Button
-                    variant="ghost"
-                    className="w-full h-full p-0 rounded-none"
+                    variant="link"
                     onClick={() => open(p)}
-                    aria-label={`Ver ${p.name}`}
+                    className="text-foreground p-0 h-auto whitespace-normal justify-start text-left mt-4 text-xs font-medium"
                   >
-                    <img
-                      src={p.image_url}
-                      alt={`${p.name} — ${p.material}`}
-                      loading="lazy"
-                      decoding="async"
-                    />
+                    {p.name}
                   </Button>
-                  <div className="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none">
-                    {p.is_on_sale ? (
-                      <span className="bg-primary text-primary-foreground px-2 py-1 text-[9px] uppercase tracking-wide">
-                        {p.sale_label || `${((1 - p.sale_price / p.price) * 100).toFixed(0)}% OFF`}
-                      </span>
-                    ) : p.featured ? (
-                      <span className="bg-background/95 text-primary border border-gold-light/70 px-2 py-1 text-[9px] uppercase tracking-wide">
-                        Destaque
-                      </span>
-                    ) : null}
-                    {!p.in_stock && (
-                      <span className="bg-foreground text-background px-2 py-1 text-[9px]">
-                        Indisponível
+                  <div className="flex gap-1.5 items-baseline mt-2 flex-wrap">
+                    {p.is_on_sale && (
+                      <del className="text-muted-foreground text-[10px]">{money(p.price)}</del>
+                    )}
+                    <span className="font-semibold text-sm">{money(priceOf(p))}</span>
+                    {isRent && (
+                      <span className="text-[11px] text-muted-foreground font-normal">
+                        / aluguel
                       </span>
                     )}
                   </div>
-                  <span
-                    className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-sm px-2 py-1 text-[9px] font-medium tracking-wide shadow-xs ${getMaterialBadgeClass(p.material)}`}
-                  >
-                    {p.material}
-                  </span>
-                </div>
-                <Button
-                  variant="link"
-                  onClick={() => open(p)}
-                  className="text-foreground p-0 h-auto whitespace-normal justify-start text-left mt-4 text-xs font-medium"
-                >
-                  {p.name}
-                </Button>
-                <div className="flex gap-2 items-center mt-2 flex-wrap">
-                  {p.is_on_sale && (
-                    <del className="text-muted-foreground text-[10px]">{money(p.price)}</del>
+                  {isRent ? (
+                    <Button
+                      variant="editorial"
+                      className="w-full text-[10px] mt-3 h-9 gap-2 px-1"
+                      disabled={!p.in_stock}
+                      onClick={() => open(p)}
+                    >
+                      <Calendar size={13} />
+                      {p.in_stock ? "Consultar aluguel" : "Indisponível"}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="editorial"
+                      className="w-full text-[10px] mt-3 h-9 gap-2 px-1"
+                      disabled={!p.in_stock}
+                      onClick={() => add(p)}
+                    >
+                      <Plus size={13} />
+                      {p.in_stock ? "Adicionar à sacola" : "Indisponível"}
+                    </Button>
                   )}
-                  <span className="font-semibold text-sm">{money(priceOf(p))}</span>
-                </div>
-                <Button
-                  variant="editorial"
-                  className="w-full text-[10px] mt-3 h-9 gap-2 px-1"
-                  disabled={!p.in_stock}
-                  onClick={() => add(p)}
-                >
-                  <Plus size={13} />
-                  {p.in_stock ? "Adicionar à sacola" : "Indisponível"}
-                </Button>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
           {loading && filteredProducts.length === 0 ? (
             <p className="py-16 text-center text-muted-foreground">Carregando vitrine...</p>
@@ -748,73 +920,173 @@ export function Storefront() {
       </Button>
       <Dialog open={!!product} onOpenChange={(v) => !v && open(null)}>
         <DialogContent className="modal-product" onOpenAutoFocus={(e) => e.preventDefault()}>
-          {product && (
-            <div className="modal-scroll">
-              <img
-                src={product.image_url}
-                alt={product.name}
-                className="w-full object-contain max-h-[55dvh] bg-muted"
-              />
-              <div className="p-6">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide ${getMaterialBadgeClass(product.material)}`}
-                  >
-                    {product.material}
-                  </span>
-                  <span className="eyebrow text-muted-foreground">{product.category}</span>
+          {product &&
+            (isRentProduct(product) ? (
+              <div className="modal-scroll bg-background">
+                <div className="relative bg-muted">
+                  <img
+                    src={product.image_url}
+                    alt={product.name}
+                    className="w-full object-contain max-h-[46dvh] bg-muted"
+                  />
+                  <div className="absolute top-3.5 left-3.5 flex flex-col items-start gap-1.5 pointer-events-none">
+                    <span className="rounded-full bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] shadow-xs">
+                      ALUGUEL
+                    </span>
+                    {product.featured && (
+                      <span className="rounded-full bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] shadow-xs">
+                        DESTAQUE
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <DialogTitle className="font-display text-3xl">{product.name}</DialogTitle>
-                <div className="flex items-center gap-3 mt-4">
+                <div className="bg-background p-6 sm:p-7">
+                  <div className="flex items-start justify-between gap-3">
+                    <DialogTitle className="font-display text-3xl sm:text-[32px] leading-tight text-foreground">
+                      {product.name}
+                    </DialogTitle>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => share(product)}
+                      className="shrink-0 rounded-full border-border bg-background px-3.5 h-9 text-xs font-medium text-foreground hover:bg-secondary gap-1.5"
+                    >
+                      <Share2 size={13} />
+                      Compartilhar
+                    </Button>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-3 flex-wrap">
+                    {product.is_on_sale && (
+                      <del className="text-muted-foreground text-sm">{money(product.price)}</del>
+                    )}
+                    <strong className="text-2xl font-semibold text-foreground">
+                      {money(priceOf(product))}
+                    </strong>
+                    <span className="text-sm text-muted-foreground font-normal">/ aluguel</span>
+                  </div>
                   {product.is_on_sale && (
-                    <del className="text-muted-foreground text-sm">{money(product.price)}</del>
+                    <p className="text-primary text-xs mt-1.5">
+                      Economize {money(product.price - product.sale_price)}
+                    </p>
                   )}
-                  <strong className="text-xl">{money(priceOf(product))}</strong>
-                </div>
-                {product.is_on_sale && (
-                  <p className="text-primary text-xs mt-2">
-                    Economize {money(product.price - product.sale_price)}
-                  </p>
-                )}
-                <DialogDescription className="mt-5 leading-7 text-sm">
-                  {product.description}
-                </DialogDescription>
-                <dl className="mt-5 text-xs">
-                  {product.characteristics.map((c, i) => (
-                    <div className="flex justify-between py-3 border-b" key={i}>
-                      <dt className="text-muted-foreground">{c.attribute}</dt>
-                      <dd>{c.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <div className="flex gap-2 mt-6">
-                  <Button
-                    className="flex-1"
-                    size="lg"
-                    onClick={() => {
-                      if (product.in_stock) add(product);
-                      else
-                        window.open(
-                          `${storeContent.whatsapp}?text=${encodeURIComponent(`Olá, Amora Acessórios! ✨ Gostaria de ser avisada quando ${product.name} estiver disponível.`)}`,
-                          "_blank",
-                        );
-                    }}
-                  >
-                    <ShoppingBag />
-                    {product.in_stock ? "Adicionar à sacola" : "Avise-me no WhatsApp"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    aria-label="Compartilhar"
-                    onClick={() => share(product)}
-                  >
-                    <Share2 />
-                  </Button>
+                  <DialogDescription className="mt-4 leading-7 text-sm text-muted-foreground">
+                    {product.description}
+                  </DialogDescription>
+                  {product.characteristics.length > 0 && (
+                    <dl className="mt-4 text-xs border-t border-border/70">
+                      {product.characteristics.map((c, i) => (
+                        <div className="flex justify-between py-2.5 border-b border-border/70" key={i}>
+                          <dt className="text-muted-foreground">{c.attribute}</dt>
+                          <dd className="text-foreground">{c.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  <div className="mt-5 pt-5 border-t border-border space-y-4">
+                    <label className="text-xs font-medium text-foreground">
+                      Data do evento
+                      <input
+                        ref={rentDateInputRef}
+                        type="date"
+                        min={todayIso}
+                        value={rentDate}
+                        onChange={(e) => setRentDate(e.target.value)}
+                        className="bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-gold"
+                      />
+                    </label>
+                    <label className="text-xs font-medium text-foreground">
+                      Seu nome (opcional)
+                      <input
+                        type="text"
+                        placeholder="Como podemos te chamar?"
+                        value={rentName}
+                        onChange={(e) => setRentName(e.target.value)}
+                        className="bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-gold"
+                      />
+                    </label>
+                    <p className="text-center italic text-xs text-muted-foreground pt-1">
+                      A disponibilidade é confirmada na hora pelo nosso WhatsApp.
+                    </p>
+                    <Button
+                      type="button"
+                      size="lg"
+                      onClick={() => handleConsultRent(product)}
+                      className="w-full min-h-12 h-auto py-3.5 px-5 rounded-full bg-linear-to-r from-[#D8B47C] to-[#B88B58] text-[#24161B] hover:brightness-95 font-semibold uppercase tracking-wider text-xs whitespace-normal text-center shadow-sm transition-all"
+                    >
+                      <MessageCircle size={18} className="shrink-0" />
+                      CONSULTAR DISPONIBILIDADE NO WHATSAPP
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="modal-scroll">
+                <img
+                  src={product.image_url}
+                  alt={product.name}
+                  className="w-full object-contain max-h-[55dvh] bg-muted"
+                />
+                <div className="p-6">
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide ${getMaterialBadgeClass(product.material)}`}
+                    >
+                      {product.material}
+                    </span>
+                    <span className="eyebrow text-muted-foreground">{product.category}</span>
+                  </div>
+                  <DialogTitle className="font-display text-3xl">{product.name}</DialogTitle>
+                  <div className="flex items-center gap-3 mt-4">
+                    {product.is_on_sale && (
+                      <del className="text-muted-foreground text-sm">{money(product.price)}</del>
+                    )}
+                    <strong className="text-xl">{money(priceOf(product))}</strong>
+                  </div>
+                  {product.is_on_sale && (
+                    <p className="text-primary text-xs mt-2">
+                      Economize {money(product.price - product.sale_price)}
+                    </p>
+                  )}
+                  <DialogDescription className="mt-5 leading-7 text-sm">
+                    {product.description}
+                  </DialogDescription>
+                  <dl className="mt-5 text-xs">
+                    {product.characteristics.map((c, i) => (
+                      <div className="flex justify-between py-3 border-b" key={i}>
+                        <dt className="text-muted-foreground">{c.attribute}</dt>
+                        <dd>{c.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <div className="flex gap-2 mt-6">
+                    <Button
+                      className="flex-1"
+                      size="lg"
+                      onClick={() => {
+                        if (product.in_stock) add(product);
+                        else
+                          window.open(
+                            `${storeContent.whatsapp}?text=${encodeURIComponent(`Olá, Amora Acessórios! ✨ Gostaria de ser avisada quando ${product.name} estiver disponível.`)}`,
+                            "_blank",
+                          );
+                      }}
+                    >
+                      <ShoppingBag />
+                      {product.in_stock ? "Adicionar à sacola" : "Avise-me no WhatsApp"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      aria-label="Compartilhar"
+                      onClick={() => share(product)}
+                    >
+                      <Share2 />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
         </DialogContent>
       </Dialog>
       <Dialog open={bag} onOpenChange={setBag}>
@@ -825,6 +1097,48 @@ export function Storefront() {
           <DialogDescription className="text-xs mt-2">
             Retirada no Olaria, Timóteo ou entrega combinada no WhatsApp.
           </DialogDescription>
+          {promoCampaignActive && cart.length > 0 && (
+            <div
+              className={`mt-4 rounded-lg border px-3.5 py-3 text-xs leading-5 transition-colors ${
+                promoStatus.tier === "individual"
+                  ? "border-gold/60 bg-primary text-primary-foreground"
+                  : promoStatus.tier === "friend"
+                    ? "border-gold/70 bg-secondary text-foreground"
+                    : "border-gold-light/80 bg-secondary/80 text-foreground"
+              }`}
+            >
+              <p className="font-medium">{promoStatus.cartMessage}</p>
+              <div className="mt-2.5">
+                <div
+                  className={`relative h-1.5 w-full rounded-full overflow-hidden ${
+                    promoStatus.tier === "individual" ? "bg-primary-hover" : "bg-border"
+                  }`}
+                >
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      promoStatus.tier === "individual" ? "bg-gold-light" : "bg-gold"
+                    }`}
+                    style={{ width: `${Math.max(4, promoStatus.progressPercent)}%` }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-0 bottom-0 left-2/3 w-px bg-background/80"
+                  />
+                </div>
+                <div
+                  className={`mt-1.5 flex justify-between text-[10px] ${
+                    promoStatus.tier === "individual"
+                      ? "text-gold-light"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  <span>R$ 0</span>
+                  <span>Amiga R$ 100</span>
+                  <span>Individual R$ 150</span>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto min-h-0 py-5">
             {!cart.length ? (
               <div className="text-center py-14">

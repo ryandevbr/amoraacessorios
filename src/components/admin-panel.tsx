@@ -37,6 +37,7 @@ import {
   uploadStoreImage,
 } from "@/services/storageService";
 import {
+  isRentProduct,
   money,
   priceOf,
   type AdminProfile,
@@ -46,6 +47,7 @@ import {
   type StoreAnnouncement,
 } from "@/data/catalog";
 import { normalizeCode } from "@/services/couponService";
+import { PROMO_ANNOUNCEMENT_DEFAULT_TEXT } from "@/data/storeContent";
 
 function ensureOptionPresent(options: string[], current: string | undefined): string[] {
   if (!current) return options;
@@ -271,11 +273,22 @@ export function AdminPanel() {
           }
         }
 
+        const nextCategory = matchedCategory ?? prev.category;
+        const nextMaterial = matchedMaterial ?? prev.material;
+        const nextListingType = isRentProduct({
+          listing_type: prev.listing_type,
+          category: nextCategory,
+          material: nextMaterial,
+        })
+          ? "rent"
+          : prev.listing_type;
+
         return {
           ...prev,
           name: analysis.name || prev.name,
-          category: matchedCategory ?? prev.category,
-          material: matchedMaterial ?? prev.material,
+          category: nextCategory,
+          material: nextMaterial,
+          listing_type: nextListingType,
           description: analysis.description || prev.description,
           characteristics: nextCharacteristics,
         };
@@ -411,6 +424,7 @@ export function AdminPanel() {
       sku: "",
       category: defaultCategory,
       material: defaultMaterial,
+      listing_type: "sale",
       price: 0,
       sale_price: 0,
       is_on_sale: false,
@@ -518,12 +532,12 @@ export function AdminPanel() {
             {error}
           </p>
         )}
-        <div className="flex gap-3 border-b mt-8 mb-8">
-          {["Produtos", "Banners", "Cupons"].map((t) => (
+        <div className="flex gap-3 border-b mt-8 mb-8 overflow-x-auto">
+          {["Produtos", "Banners e Campanhas", "Cupons"].map((t) => (
             <Button
               key={t}
               variant="ghost"
-              className={`rounded-none px-5 h-12 ${tab === t ? "border-b-2 border-primary text-primary" : ""}`}
+              className={`rounded-none px-5 h-12 shrink-0 ${tab === t ? "border-b-2 border-primary text-primary" : ""}`}
               onClick={() => setTab(t)}
             >
               {t}
@@ -619,105 +633,122 @@ export function AdminPanel() {
               </Button>
             </div>
             <div className="mt-6">
-              {list.map((p) => (
-                <div className="admin-table" key={p.id}>
-                  <img
-                    src={p.image_url}
-                    alt={p.name}
-                    className="w-full aspect-square object-cover rounded"
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{p.name}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {p.sku} · {p.category} · {p.material}
-                    </p>
-                    <div className="flex gap-3 mt-3 flex-wrap">
-                      {(["active", "featured", "in_stock"] as const).map((key, i) => (
-                        <label key={key} className="flex items-center gap-1 text-[10px]">
-                          <input
-                            type="checkbox"
-                            checked={p[key]}
-                            onChange={() => void handleToggleProduct(p, key)}
-                          />
-                          {["Ativo", "Destaque", "Disponível"][i]}
-                        </label>
-                      ))}
+              {list.map((p) => {
+                const isRent = isRentProduct(p);
+                return (
+                  <div className="admin-table" key={p.id}>
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="w-full aspect-square object-cover rounded"
+                    />
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium">{p.name}</p>
+                        {isRent && (
+                          <span className="inline-flex items-center rounded-full bg-primary px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-primary-foreground shrink-0">
+                            ALUGUEL
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {p.sku ? `${p.sku} · ` : ""}
+                        {p.category} · {p.material}
+                      </p>
+                      <div className="flex gap-3 mt-3 flex-wrap">
+                        {(["active", "featured", "in_stock"] as const).map((key, i) => (
+                          <label key={key} className="flex items-center gap-1 text-[10px]">
+                            <input
+                              type="checkbox"
+                              checked={p[key]}
+                              onChange={() => void handleToggleProduct(p, key)}
+                            />
+                            {["Ativo", "Destaque", "Disponível"][i]}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-xs">
+                      {p.is_on_sale && (
+                        <del className="text-muted-foreground block">{money(p.price)}</del>
+                      )}
+                      <strong>{money(priceOf(p))}</strong>
+                      {isRent && (
+                        <span className="block text-[10px] text-muted-foreground">/ aluguel</span>
+                      )}
+                      {p.is_on_sale && (
+                        <p className="text-primary text-[10px] mt-1">
+                          {Math.round((1 - p.sale_price / p.price) * 100)}% OFF
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Copiar link para Stories"
+                        aria-label={`Copiar link de ${p.name}`}
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(
+                            `${window.location.origin}/?produto=${p.id}`,
+                          );
+                          toast.success("Link copiado para os Stories!");
+                        }}
+                      >
+                        <LinkIcon />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Editar"
+                        aria-label={`Editar ${p.name}`}
+                        onClick={() => {
+                          productModalSessionRef.current += 1;
+                          lastProductFileRef.current = null;
+                          setAnalyzingAi(false);
+                          setAutoFillOnUpload(false);
+                          setEdit({
+                            ...structuredClone(p),
+                            listing_type: isRent ? "rent" : "sale",
+                          });
+                          setSizeInfo("");
+                          setInlineOptionType(null);
+                          setInlineOptionValue("");
+                        }}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Duplicar"
+                        aria-label={`Duplicar ${p.name}`}
+                        onClick={async () => {
+                          try {
+                            await duplicateProduct(p);
+                            toast.success("Produto duplicado como inativo.");
+                          } catch (err) {
+                            toast.error(
+                              err instanceof Error ? err.message : "Erro ao duplicar produto.",
+                            );
+                          }
+                        }}
+                      >
+                        <Copy />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Excluir"
+                        aria-label={`Excluir ${p.name}`}
+                        onClick={() => setConfirm({ kind: "products", id: p.id })}
+                      >
+                        <Trash2 />
+                      </Button>
                     </div>
                   </div>
-                  <div className="text-xs">
-                    {p.is_on_sale && (
-                      <del className="text-muted-foreground block">{money(p.price)}</del>
-                    )}
-                    <strong>{money(priceOf(p))}</strong>
-                    {p.is_on_sale && (
-                      <p className="text-primary text-[10px] mt-1">
-                        {Math.round((1 - p.sale_price / p.price) * 100)}% OFF
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Copiar link para Stories"
-                      aria-label={`Copiar link de ${p.name}`}
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(
-                          `${window.location.origin}/?produto=${p.id}`,
-                        );
-                        toast.success("Link copiado para os Stories!");
-                      }}
-                    >
-                      <LinkIcon />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      title="Editar"
-                      aria-label={`Editar ${p.name}`}
-                      onClick={() => {
-                        productModalSessionRef.current += 1;
-                        lastProductFileRef.current = null;
-                        setAnalyzingAi(false);
-                        setAutoFillOnUpload(false);
-                        setEdit(structuredClone(p));
-                        setSizeInfo("");
-                        setInlineOptionType(null);
-                        setInlineOptionValue("");
-                      }}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Duplicar"
-                      aria-label={`Duplicar ${p.name}`}
-                      onClick={async () => {
-                        try {
-                          await duplicateProduct(p);
-                          toast.success("Produto duplicado como inativo.");
-                        } catch (err) {
-                          toast.error(
-                            err instanceof Error ? err.message : "Erro ao duplicar produto.",
-                          );
-                        }
-                      }}
-                    >
-                      <Copy />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Excluir"
-                      aria-label={`Excluir ${p.name}`}
-                      onClick={() => setConfirm({ kind: "products", id: p.id })}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             {!loading && !list.length && (
               <p className="text-sm text-muted-foreground text-center py-12">
@@ -726,8 +757,92 @@ export function AdminPanel() {
             )}
           </>
         )}
-        {tab === "Banners" && (
+        {tab === "Banners e Campanhas" && (
           <>
+            <div className="rounded-xl border border-gold-light/80 bg-secondary/50 p-5 sm:p-6 max-w-2xl mb-10">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="eyebrow text-gold mb-1.5">Campanha promocional</p>
+                  <h2 className="text-2xl sm:text-3xl">Consultoria de Automaquiagem</h2>
+                  <p className="text-xs text-muted-foreground leading-6 mt-2">
+                    Controla o banner editorial da campanha na vitrine, a barra de progresso
+                    dinâmica na sacola (R$ 100 com amiga / R$ 150 individual) e a mensagem de brinde
+                    no WhatsApp.
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium shrink-0 ${
+                    announcementDraft.promo_campaign_active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background border text-muted-foreground"
+                  }`}
+                >
+                  {announcementDraft.promo_campaign_active ? "Ativa na loja" : "Desativada"}
+                </span>
+              </div>
+              <div className="mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-4">
+                <label className="flex items-center gap-2.5 text-sm text-foreground font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={announcementDraft.promo_campaign_active}
+                    onChange={async (e) => {
+                      const next = {
+                        ...announcementDraft,
+                        promo_campaign_active: e.target.checked,
+                      };
+                      setAnnouncementDraft(next);
+                      try {
+                        await saveAnnouncement(next);
+                        toast.success(
+                          e.target.checked
+                            ? "Campanha da Consultoria ativada na loja!"
+                            : "Campanha da Consultoria desativada.",
+                        );
+                      } catch (err) {
+                        setAnnouncementDraft(data.announcement);
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Erro ao atualizar status da campanha.",
+                        );
+                      }
+                    }}
+                  />
+                  Exibir banner e incentivos da Consultoria de Automaquiagem
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  disabled={saving}
+                  onClick={async () => {
+                    const next = {
+                      ...announcementDraft,
+                      active: true,
+                      text: PROMO_ANNOUNCEMENT_DEFAULT_TEXT,
+                      link: "#promocao",
+                      promo_campaign_active: true,
+                    };
+                    setAnnouncementDraft(next);
+                    setSaving(true);
+                    try {
+                      await saveAnnouncement(next);
+                      toast.success("Barra de avisos atualizada para a campanha!");
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error ? err.message : "Erro ao aplicar texto da campanha.",
+                      );
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  <Sparkles size={13} />
+                  Usar texto da campanha no topo
+                </Button>
+              </div>
+            </div>
             <h2 className="text-3xl mb-5">Barra de avisos</h2>
             <div className="grid gap-4 max-w-2xl">
               <label className="flex items-center gap-2">
@@ -998,6 +1113,93 @@ export function AdminPanel() {
           <DialogDescription>Detalhes da peça</DialogDescription>
           {edit && (
             <div className="overflow-y-auto min-h-0 space-y-5 pr-1">
+              <div className="space-y-2">
+                <span className="block text-xs text-muted-foreground">Modalidade do Produto</span>
+                <div
+                  role="radiogroup"
+                  aria-label="Modalidade do Produto"
+                  className="grid grid-cols-2 gap-1.5 rounded-lg border bg-muted/60 p-1"
+                >
+                  {(
+                    [
+                      ["sale", "Venda"],
+                      ["rent", "Aluguel"],
+                    ] as const
+                  ).map(([mode, label]) => {
+                    const selected = edit.listing_type === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => {
+                          setEdit((prev) => {
+                            if (!prev) return prev;
+                            if (mode === "rent") {
+                              const nextCategory =
+                                !prev.name.trim() && categoryNames.includes("Aluguel de Bolsas")
+                                  ? "Aluguel de Bolsas"
+                                  : prev.category;
+                              const nextMaterial =
+                                !prev.name.trim() && materialNames.includes("Aluguel")
+                                  ? "Aluguel"
+                                  : prev.material;
+                              return {
+                                ...prev,
+                                listing_type: "rent",
+                                category: nextCategory,
+                                material: nextMaterial,
+                              };
+                            }
+                            const nextCategory =
+                              optionLookupKey(prev.category) === "aluguel de bolsas" ||
+                              optionLookupKey(prev.category) === "aluguel"
+                                ? (categoryNames.find((c) => optionLookupKey(c) === "bolsas") ??
+                                  categoryNames.find(
+                                    (c) =>
+                                      optionLookupKey(c) !== "aluguel" &&
+                                      optionLookupKey(c) !== "aluguel de bolsas",
+                                  ) ??
+                                  prev.category)
+                                : prev.category;
+                            const nextMaterial =
+                              optionLookupKey(prev.material) === "aluguel" ||
+                              optionLookupKey(prev.material) === "aluguel de bolsas"
+                                ? (materialNames.find((m) => optionLookupKey(m) === "bolsa") ??
+                                  materialNames.find(
+                                    (m) =>
+                                      optionLookupKey(m) !== "aluguel" &&
+                                      optionLookupKey(m) !== "aluguel de bolsas",
+                                  ) ??
+                                  prev.material)
+                                : prev.material;
+                            return {
+                              ...prev,
+                              listing_type: "sale",
+                              category: nextCategory,
+                              material: nextMaterial,
+                            };
+                          });
+                        }}
+                        className={`h-10 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                          selected
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {edit.listing_type === "rent" && (
+                  <p className="text-[11px] text-muted-foreground leading-5">
+                    Na vitrine, a peça exibirá o selo <strong>ALUGUEL</strong>, preço{" "}
+                    <strong>/ aluguel</strong> e abrirá o modal de consulta de data no WhatsApp.
+                  </p>
+                )}
+              </div>
               <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
                 <label>
                   Foto principal
@@ -1245,7 +1447,15 @@ export function AdminPanel() {
                       checked={edit[key]}
                       onChange={(e) => setEdit({ ...edit, [key]: e.target.checked })}
                     />
-                    {["Ativo na vitrine", "Destaque", "Disponível em estoque"][i]}
+                    {
+                      [
+                        "Ativo na vitrine",
+                        "Destaque",
+                        edit.listing_type === "rent"
+                          ? "Disponível para aluguel"
+                          : "Disponível em estoque",
+                      ][i]
+                    }
                   </label>
                 ))}
               </div>
@@ -1316,7 +1526,7 @@ export function AdminPanel() {
                 </Button>
               </div>
               <label>
-                Preço original (R$)
+                {edit.listing_type === "rent" ? "Valor do aluguel (R$)" : "Preço original (R$)"}
                 <input
                   type="number"
                   min="0"
@@ -1337,7 +1547,9 @@ export function AdminPanel() {
                 <>
                   <div className="field-grid">
                     <label>
-                      Preço promocional (R$)
+                      {edit.listing_type === "rent"
+                        ? "Valor promocional do aluguel (R$)"
+                        : "Preço promocional (R$)"}
                       <input
                         type="number"
                         step="0.01"

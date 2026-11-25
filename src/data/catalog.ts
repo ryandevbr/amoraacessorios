@@ -1,3 +1,5 @@
+export type ProductListingType = "sale" | "rent";
+
 export interface ProductCharacteristic {
   attribute: string;
   value: string;
@@ -8,6 +10,7 @@ export interface Product {
   sku: string;
   category: string;
   material: string;
+  listing_type: ProductListingType;
   price: number;
   sale_price: number;
   is_on_sale: boolean;
@@ -42,6 +45,7 @@ export interface StoreAnnouncement {
   active: boolean;
   text: string;
   link: string;
+  promo_campaign_active: boolean;
 }
 export interface AdminProfile {
   name: string;
@@ -59,7 +63,7 @@ export const emptyStoreData: StoreData = {
   products: [],
   coupons: [],
   banners: [],
-  announcement: { active: false, text: "", link: "#vitrine" },
+  announcement: { active: false, text: "", link: "#vitrine", promo_campaign_active: true },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
 
@@ -94,6 +98,7 @@ interface DemoSeedItem {
   name: string;
   category: string;
   material: string;
+  listing_type?: ProductListingType;
   price: number;
   is_on_sale?: boolean;
   featured?: boolean;
@@ -124,6 +129,7 @@ const demoItems: DemoSeedItem[] = [
     name: "Clutch Festa Dourada Champanhe",
     category: "Aluguel de Bolsas",
     material: "Aluguel",
+    listing_type: "rent",
     price: 59.9,
     featured: true,
     variant: "plum",
@@ -226,6 +232,7 @@ const demoItems: DemoSeedItem[] = [
     name: "Clutch Pérolas Noiva & Festa",
     category: "Aluguel de Bolsas",
     material: "Aluguel",
+    listing_type: "rent",
     price: 69.9,
     variant: "plum",
     description:
@@ -289,6 +296,7 @@ export const initialData: StoreData = {
     sku: `AM${String(i + 1).padStart(3, "0")}`,
     category: item.category,
     material: item.material,
+    listing_type: item.listing_type ?? "sale",
     price: item.price,
     sale_price: Number((item.price * 0.8).toFixed(2)),
     is_on_sale: Boolean(item.is_on_sale),
@@ -362,8 +370,9 @@ export const initialData: StoreData = {
   ],
   announcement: {
     active: true,
-    text: "Semijoias, bolsas & maquiagens ✨ Use o cupom PRIMEIRACOMPRA e ganhe 10% OFF",
-    link: "#vitrine",
+    text: "✨ Ganhe uma Consultoria de Automaquiagem nas compras a partir de R$ 150 (ou R$ 100 cada com uma amiga)!",
+    link: "#promocao",
+    promo_campaign_active: true,
   },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
@@ -390,3 +399,59 @@ export const materialsList: string[] = [...DEFAULT_MATERIALS];
 export const money = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 export const priceOf = (p: Product) => (p.is_on_sale ? p.sale_price : p.price);
+
+const RENT_LABELS = new Set(["aluguel", "aluguel de bolsas"]);
+
+export function isRentProduct(
+  product: Pick<Product, "category" | "material"> & { listing_type?: ProductListingType },
+): boolean {
+  if (product.listing_type === "rent") return true;
+  const cat = (product.category ?? "").trim().toLocaleLowerCase("pt-BR");
+  const mat = (product.material ?? "").trim().toLocaleLowerCase("pt-BR");
+  return RENT_LABELS.has(cat) || RENT_LABELS.has(mat);
+}
+
+export function resolveListingType(
+  rawListingType: unknown,
+  category: string,
+  material: string,
+): ProductListingType {
+  if (rawListingType === "rent") return "rent";
+  return isRentProduct({ listing_type: "sale", category, material }) ? "rent" : "sale";
+}
+
+export function getTodayLocalIsoDate(now = new Date()): string {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function formatDateBr(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim());
+  if (!match) return isoDate.trim();
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+export function buildRentWhatsAppMessage(params: {
+  product: Product;
+  eventDateIso: string;
+  customerName?: string;
+  productUrl: string;
+}): string {
+  const formattedPrice = money(priceOf(params.product));
+  const formattedDate = formatDateBr(params.eventDateIso);
+  const trimmedName = (params.customerName ?? "").trim();
+  const lines = [
+    "Olá, Amora Acessórios! ✨",
+    "Gostaria de consultar a disponibilidade de *aluguel* da peça:",
+    "",
+    `• *${params.product.name}* (${formattedPrice} / aluguel)`,
+    `📅 Data do evento: ${formattedDate}`,
+    ...(trimmedName ? [`👤 Nome: ${trimmedName}`] : []),
+    `🔗 Link da peça: ${params.productUrl}`,
+    "",
+    "Aguardo a confirmação da disponibilidade!",
+  ];
+  return lines.join("\n");
+}

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   emptyStoreData,
   initialData,
+  resolveListingType,
   type AdminProfile,
   type Banner,
   type Coupon,
   type Product,
   type ProductCharacteristic,
+  type ProductListingType,
   type StoreAnnouncement,
   type StoreData,
 } from "@/data/catalog";
@@ -17,6 +19,43 @@ import { deleteStoreImage } from "@/services/storageService";
 const KEY = "amora-acessorios-store-v1";
 const STORE_EVENT = "amora-store";
 const DEFAULT_BANNER_ALT = "Banner Amora Acessórios";
+const PROMO_FALLBACK_KEY = "amora-promo-campaign-v1";
+
+function readLocalPromoFallback(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(PROMO_FALLBACK_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeLocalPromoFallback(active: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PROMO_FALLBACK_KEY, String(active));
+  } catch {}
+}
+
+function isMissingPromoColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    (error.message ?? "").includes("promo_campaign_active")
+  );
+}
+
+function isMissingListingTypeColumnError(
+  error: { code?: string; message?: string } | null,
+): boolean {
+  if (!error) return false;
+  return (
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    (error.message ?? "").includes("listing_type")
+  );
+}
 
 export type StoreScope = "public" | "admin";
 
@@ -26,6 +65,7 @@ interface ProductRow {
   sku: string | null;
   category: string;
   material: string;
+  listing_type?: string | null;
   price: number | string;
   sale_price: number | string | null;
   is_on_sale: boolean;
@@ -53,6 +93,7 @@ interface StoreSettingsRow {
   announcement_active: boolean;
   announcement_text: string | null;
   announcement_link: string | null;
+  promo_campaign_active?: boolean | null;
 }
 
 interface CouponRow {
@@ -93,6 +134,7 @@ function mapProductRow(row: ProductRow): Product {
     sku: row.sku ?? "",
     category: row.category,
     material: row.material,
+    listing_type: resolveListingType(row.listing_type, row.category, row.material),
     price: Number(row.price),
     sale_price: Number(row.sale_price ?? 0),
     is_on_sale: Boolean(row.is_on_sale),
@@ -132,12 +174,14 @@ function mapCouponRow(row: CouponRow): Coupon {
 }
 
 function toProductPayload(product: Product) {
+  const listingType: ProductListingType = product.listing_type === "rent" ? "rent" : "sale";
   return {
     id: product.id || crypto.randomUUID(),
     name: product.name.trim(),
     sku: product.sku.trim(),
     category: product.category,
     material: product.material,
+    listing_type: listingType,
     price: Number(product.price),
     sale_price: product.is_on_sale
       ? Number(product.sale_price)
@@ -191,7 +235,24 @@ function notifyStoreChanged() {
 export function loadStore(): StoreData {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? { ...initialData, ...JSON.parse(raw) } : structuredClone(initialData);
+    if (!raw) return structuredClone(initialData);
+    const parsed = JSON.parse(raw) as Partial<StoreData>;
+    const products = Array.isArray(parsed.products)
+      ? parsed.products.map((p) => ({
+          ...p,
+          listing_type: resolveListingType(p.listing_type, p.category, p.material),
+        }))
+      : structuredClone(initialData.products);
+    return {
+      ...initialData,
+      ...parsed,
+      products,
+      announcement: {
+        ...initialData.announcement,
+        ...parsed.announcement,
+        promo_campaign_active: parsed.announcement?.promo_campaign_active ?? true,
+      },
+    };
   } catch {
     return structuredClone(initialData);
   }
@@ -210,7 +271,7 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
   let productsQuery = supabase
     .from("products")
     .select(
-      "id, name, sku, category, material, price, sale_price, is_on_sale, sale_label, image_url, description, active, featured, in_stock, characteristics",
+      "id, name, sku, category, material, listing_type, price, sale_price, is_on_sale, sale_label, image_url, description, active, featured, in_stock, characteristics",
     )
     .order("featured", { ascending: false })
     .order("created_at", { ascending: false });
@@ -234,7 +295,7 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
 
   const settingsQuery = supabase
     .from("store_settings")
-    .select("id, announcement_active, announcement_text, announcement_link")
+    .select("id, announcement_active, announcement_text, announcement_link, promo_campaign_active")
     .eq("id", 1)
     .maybeSingle();
 
@@ -245,8 +306,27 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
     settingsQuery,
   ]);
 
+  let productRows = (productsRes.data ?? []) as ProductRow[];
   if (productsRes.error) {
-    throw new Error(`Erro ao carregar produtos: ${productsRes.error.message}`);
+    if (isMissingListingTypeColumnError(productsRes.error)) {
+      let fallbackProductsQuery = supabase
+        .from("products")
+        .select(
+          "id, name, sku, category, material, price, sale_price, is_on_sale, sale_label, image_url, description, active, featured, in_stock, characteristics",
+        )
+        .order("featured", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (scope === "public") {
+        fallbackProductsQuery = fallbackProductsQuery.eq("active", true);
+      }
+      const fallbackProductsRes = await fallbackProductsQuery;
+      if (fallbackProductsRes.error) {
+        throw new Error(`Erro ao carregar produtos: ${fallbackProductsRes.error.message}`);
+      }
+      productRows = (fallbackProductsRes.data ?? []) as ProductRow[];
+    } else {
+      throw new Error(`Erro ao carregar produtos: ${productsRes.error.message}`);
+    }
   }
   let bannersRows = (bannersRes.data ?? []) as HeroBannerRow[];
   if (bannersRes.error) {
@@ -274,18 +354,36 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
   if (couponsRes.error) {
     throw new Error(`Erro ao carregar cupons: ${couponsRes.error.message}`);
   }
+
+  let settingsRow = settingsRes.data as StoreSettingsRow | null;
+  let usedPromoFallback = false;
   if (settingsRes.error) {
-    throw new Error(`Erro ao carregar configurações: ${settingsRes.error.message}`);
+    if (isMissingPromoColumnError(settingsRes.error)) {
+      usedPromoFallback = true;
+      const fallbackSettingsRes = await supabase
+        .from("store_settings")
+        .select("id, announcement_active, announcement_text, announcement_link")
+        .eq("id", 1)
+        .maybeSingle();
+      if (fallbackSettingsRes.error) {
+        throw new Error(`Erro ao carregar configurações: ${fallbackSettingsRes.error.message}`);
+      }
+      settingsRow = fallbackSettingsRes.data as StoreSettingsRow | null;
+    } else {
+      throw new Error(`Erro ao carregar configurações: ${settingsRes.error.message}`);
+    }
   }
 
-  const settingsRow = settingsRes.data as StoreSettingsRow | null;
   const announcement: StoreAnnouncement = settingsRow
     ? {
         active: Boolean(settingsRow.announcement_active),
         text: settingsRow.announcement_text ?? "",
         link: settingsRow.announcement_link ?? "#vitrine",
+        promo_campaign_active: usedPromoFallback
+          ? readLocalPromoFallback()
+          : Boolean(settingsRow.promo_campaign_active ?? true),
       }
-    : { ...emptyStoreData.announcement };
+    : { ...emptyStoreData.announcement, promo_campaign_active: readLocalPromoFallback() };
 
   let profile: AdminProfile = { ...emptyStoreData.profile };
   if (scope === "admin") {
@@ -312,7 +410,7 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
   }
 
   return {
-    products: ((productsRes.data ?? []) as ProductRow[]).map(mapProductRow),
+    products: productRows.map(mapProductRow),
     banners: bannersRows.map(mapBannerRow),
     coupons: ((couponsRes.data ?? []) as CouponRow[]).map(mapCouponRow),
     announcement,
@@ -346,9 +444,31 @@ export async function upsertProduct(product: Product, previousImageUrl?: string)
     .from("products")
     .upsert(payload, { onConflict: "id" })
     .select(
-      "id, name, sku, category, material, price, sale_price, is_on_sale, sale_label, image_url, description, active, featured, in_stock, characteristics",
+      "id, name, sku, category, material, listing_type, price, sale_price, is_on_sale, sale_label, image_url, description, active, featured, in_stock, characteristics",
     )
     .single();
+
+  if (error && isMissingListingTypeColumnError(error)) {
+    const { listing_type: requestedListingType, ...legacyPayload } = payload;
+    const fallback = await client
+      .from("products")
+      .upsert(legacyPayload, { onConflict: "id" })
+      .select(
+        "id, name, sku, category, material, price, sale_price, is_on_sale, sale_label, image_url, description, active, featured, in_stock, characteristics",
+      )
+      .single();
+
+    if (fallback.error || !fallback.data) {
+      throw new Error(`Erro ao salvar produto: ${fallback.error?.message ?? "resposta vazia"}`);
+    }
+
+    if (previousImageUrl && previousImageUrl !== payload.image_url) {
+      await deleteStoreImage(previousImageUrl);
+    }
+
+    const mapped = mapProductRow(fallback.data as ProductRow);
+    return { ...mapped, listing_type: requestedListingType };
+  }
 
   if (error || !data) {
     throw new Error(`Erro ao salvar produto: ${error?.message ?? "resposta vazia"}`);
@@ -432,7 +552,8 @@ export async function saveStoreAnnouncement(
   announcement: StoreAnnouncement,
 ): Promise<StoreAnnouncement> {
   const client = requireSupabase();
-  const payload = {
+  const promoActive = Boolean(announcement.promo_campaign_active);
+  const basePayload = {
     id: 1,
     announcement_active: Boolean(announcement.active),
     announcement_text: announcement.text.trim(),
@@ -441,19 +562,45 @@ export async function saveStoreAnnouncement(
 
   const { data, error } = await client
     .from("store_settings")
-    .upsert(payload, { onConflict: "id" })
-    .select("id, announcement_active, announcement_text, announcement_link")
+    .upsert({ ...basePayload, promo_campaign_active: promoActive }, { onConflict: "id" })
+    .select("id, announcement_active, announcement_text, announcement_link, promo_campaign_active")
     .single();
+
+  if (error && isMissingPromoColumnError(error)) {
+    writeLocalPromoFallback(promoActive);
+    const fallback = await client
+      .from("store_settings")
+      .upsert(basePayload, { onConflict: "id" })
+      .select("id, announcement_active, announcement_text, announcement_link")
+      .single();
+
+    if (fallback.error || !fallback.data) {
+      throw new Error(
+        `Erro ao salvar configurações da loja: ${fallback.error?.message ?? "resposta vazia"}`,
+      );
+    }
+
+    const fallbackRow = fallback.data as StoreSettingsRow;
+    return {
+      active: Boolean(fallbackRow.announcement_active),
+      text: fallbackRow.announcement_text ?? "",
+      link: fallbackRow.announcement_link ?? "#vitrine",
+      promo_campaign_active: promoActive,
+    };
+  }
 
   if (error || !data) {
     throw new Error(`Erro ao salvar barra de avisos: ${error?.message ?? "resposta vazia"}`);
   }
 
   const row = data as StoreSettingsRow;
+  const persistedPromo = Boolean(row.promo_campaign_active ?? promoActive);
+  writeLocalPromoFallback(persistedPromo);
   return {
     active: Boolean(row.announcement_active),
     text: row.announcement_text ?? "",
     link: row.announcement_link ?? "#vitrine",
+    promo_campaign_active: persistedPromo,
   };
 }
 

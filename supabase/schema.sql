@@ -29,6 +29,7 @@ create table if not exists public.products (
   sku text not null default '',
   category text not null,
   material text not null,
+  listing_type text not null default 'sale' check (listing_type in ('sale', 'rent')),
   price numeric(10, 2) not null check (price > 0),
   sale_price numeric(10, 2) not null default 0 check (sale_price >= 0),
   is_on_sale boolean not null default false,
@@ -59,12 +60,13 @@ create table if not exists public.hero_banners (
   updated_at timestamptz not null default now()
 );
 
--- Configurações públicas da loja e barra de avisos (registro único id = 1)
+-- Configurações públicas da loja, barra de avisos e campanha promocional (registro único id = 1)
 create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
   announcement_active boolean not null default true,
   announcement_text text not null default '',
-  announcement_link text not null default '#vitrine',
+  announcement_link text not null default '#promocao',
+  promo_campaign_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -170,12 +172,19 @@ create trigger trg_admin_profiles_updated_at
 -- ----------------------------------------------------------------------------
 -- 5. Registros iniciais padrão (configurações + categorias/materiais)
 -- ----------------------------------------------------------------------------
-insert into public.store_settings (id, announcement_active, announcement_text, announcement_link)
+insert into public.store_settings (
+  id,
+  announcement_active,
+  announcement_text,
+  announcement_link,
+  promo_campaign_active
+)
 values (
   1,
   true,
-  'Semijoias, bolsas & maquiagens ✨ Use o cupom PRIMEIRACOMPRA e ganhe 10% OFF',
-  '#vitrine'
+  '✨ Ganhe uma Consultoria de Automaquiagem nas compras a partir de R$ 150 (ou R$ 100 cada com uma amiga)!',
+  '#promocao',
+  true
 )
 on conflict (id) do nothing;
 

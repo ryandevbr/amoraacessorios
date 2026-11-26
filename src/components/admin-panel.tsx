@@ -47,7 +47,6 @@ import {
   type StoreAnnouncement,
 } from "@/data/catalog";
 import { normalizeCode } from "@/services/couponService";
-import { PROMO_ANNOUNCEMENT_DEFAULT_TEXT } from "@/data/storeContent";
 
 function ensureOptionPresent(options: string[], current: string | undefined): string[] {
   if (!current) return options;
@@ -99,7 +98,6 @@ export function AdminPanel() {
   } | null>(null);
   const [profile, setProfile] = useState(false);
   const [sizeInfo, setSizeInfo] = useState("");
-  const [mobileSizeInfo, setMobileSizeInfo] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [autoFillOnUpload, setAutoFillOnUpload] = useState(true);
@@ -307,27 +305,22 @@ export function AdminPanel() {
     }
   }
 
-  async function upload(file: File, kind: "product" | "banner" | "banner-mobile" | "profile") {
+  async function upload(file: File, kind: "product" | "banner" | "profile") {
     const sessionId = productModalSessionRef.current;
     setUploading(true);
     try {
       const result =
-        kind === "banner" || kind === "banner-mobile"
+        kind === "banner"
           ? await uploadOriginalBannerImage(file)
           : await uploadStoreImage(file, kind === "product" ? "products" : "profiles");
-      if (kind === "banner" || kind === "banner-mobile") {
+      if (kind === "banner") {
         const sizeLabel =
           result.original >= 1024 * 1024
             ? `${(result.original / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`
             : `${Math.round(result.original / 1024)} KB`;
         pendingUploadsRef.current.push(result.url);
-        if (kind === "banner") {
-          setSizeInfo(sizeLabel);
-          setBanner((prev) => (prev ? { ...prev, image_url: result.url } : prev));
-        } else {
-          setMobileSizeInfo(sizeLabel);
-          setBanner((prev) => (prev ? { ...prev, mobile_image_url: result.url } : prev));
-        }
+        setSizeInfo(sizeLabel);
+        setBanner((prev) => (prev ? { ...prev, image_url: result.url, mobile_image_url: null } : prev));
       } else {
         setSizeInfo(
           `${Math.round(result.original / 1024)} KB → ${Math.round(result.compressed / 1024)} KB`,
@@ -759,90 +752,6 @@ export function AdminPanel() {
         )}
         {tab === "Banners e Campanhas" && (
           <>
-            <div className="rounded-xl border border-gold-light/80 bg-secondary/50 p-5 sm:p-6 max-w-2xl mb-10">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="eyebrow text-gold mb-1.5">Campanha promocional</p>
-                  <h2 className="text-2xl sm:text-3xl">Consultoria de Automaquiagem</h2>
-                  <p className="text-xs text-muted-foreground leading-6 mt-2">
-                    Controla o banner editorial da campanha na vitrine, a barra de progresso
-                    dinâmica na sacola (R$ 100 com amiga / R$ 150 individual) e a mensagem de brinde
-                    no WhatsApp.
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full px-3 py-1 text-[11px] font-medium shrink-0 ${
-                    announcementDraft.promo_campaign_active
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background border text-muted-foreground"
-                  }`}
-                >
-                  {announcementDraft.promo_campaign_active ? "Ativa na loja" : "Desativada"}
-                </span>
-              </div>
-              <div className="mt-5 pt-4 border-t flex flex-wrap items-center justify-between gap-4">
-                <label className="flex items-center gap-2.5 text-sm text-foreground font-medium cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={announcementDraft.promo_campaign_active}
-                    onChange={async (e) => {
-                      const next = {
-                        ...announcementDraft,
-                        promo_campaign_active: e.target.checked,
-                      };
-                      setAnnouncementDraft(next);
-                      try {
-                        await saveAnnouncement(next);
-                        toast.success(
-                          e.target.checked
-                            ? "Campanha da Consultoria ativada na loja!"
-                            : "Campanha da Consultoria desativada.",
-                        );
-                      } catch (err) {
-                        setAnnouncementDraft(data.announcement);
-                        toast.error(
-                          err instanceof Error
-                            ? err.message
-                            : "Erro ao atualizar status da campanha.",
-                        );
-                      }
-                    }}
-                  />
-                  Exibir banner e incentivos da Consultoria de Automaquiagem
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  disabled={saving}
-                  onClick={async () => {
-                    const next = {
-                      ...announcementDraft,
-                      active: true,
-                      text: PROMO_ANNOUNCEMENT_DEFAULT_TEXT,
-                      link: "#promocao",
-                      promo_campaign_active: true,
-                    };
-                    setAnnouncementDraft(next);
-                    setSaving(true);
-                    try {
-                      await saveAnnouncement(next);
-                      toast.success("Barra de avisos atualizada para a campanha!");
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error ? err.message : "Erro ao aplicar texto da campanha.",
-                      );
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                >
-                  <Sparkles size={13} />
-                  Usar texto da campanha no topo
-                </Button>
-              </div>
-            </div>
             <h2 className="text-3xl mb-5">Barra de avisos</h2>
             <div className="grid gap-4 max-w-2xl">
               <label className="flex items-center gap-2">
@@ -898,16 +807,164 @@ export function AdminPanel() {
                 {saving ? "Salvando..." : "Salvar aviso"}
               </Button>
             </div>
+            <div className="rounded-xl border border-[#B88B58]/35 bg-secondary/50 p-5 sm:p-6 max-w-2xl mt-10">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="eyebrow text-gold mb-1.5">Promoções e campanhas</p>
+                  <h2 className="text-2xl sm:text-3xl">Espaço de Promoções na Vitrine</h2>
+                  <p className="text-xs text-muted-foreground leading-6 mt-1.5">
+                    Personalize o card de destaque exibido entre o banner principal e os produtos.
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium shrink-0 ${
+                    announcementDraft.promo_active
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background border text-muted-foreground"
+                  }`}
+                >
+                  {announcementDraft.promo_active ? "Ativo na vitrine" : "Oculto"}
+                </span>
+              </div>
+              <div className="grid gap-4 mt-5 pt-4 border-t">
+                <label className="flex items-center gap-2.5 text-sm text-foreground font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={announcementDraft.promo_active}
+                    onChange={(e) =>
+                      setAnnouncementDraft({
+                        ...announcementDraft,
+                        promo_active: e.target.checked,
+                      })
+                    }
+                  />
+                  Exibir espaço de promoções no site
+                </label>
+                <label>
+                  Selo superior
+                  <input
+                    placeholder="Ex.: CAMPANHA ESPECIAL DA SEMANA"
+                    value={announcementDraft.promo_badge}
+                    onChange={(e) =>
+                      setAnnouncementDraft({
+                        ...announcementDraft,
+                        promo_badge: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Título da promoção
+                  <input
+                    placeholder="Ex.: Ganhe uma Consultoria de Automaquiagem!"
+                    value={announcementDraft.promo_title}
+                    onChange={(e) =>
+                      setAnnouncementDraft({
+                        ...announcementDraft,
+                        promo_title: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Descrição / Regras
+                  <textarea
+                    rows={5}
+                    placeholder="Descreva os benefícios e condições da promoção..."
+                    value={announcementDraft.promo_description}
+                    onChange={(e) =>
+                      setAnnouncementDraft({
+                        ...announcementDraft,
+                        promo_description: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Destaque / Validade (opcional)
+                  <input
+                    placeholder="Ex.: Válido por tempo limitado"
+                    value={announcementDraft.promo_highlight}
+                    onChange={(e) =>
+                      setAnnouncementDraft({
+                        ...announcementDraft,
+                        promo_highlight: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <div className="flex flex-wrap gap-3 pt-1">
+                  <Button
+                    type="button"
+                    disabled={saving}
+                    onClick={async () => {
+                      if (
+                        announcementDraft.promo_active &&
+                        !announcementDraft.promo_title.trim()
+                      ) {
+                        toast.error("Informe o título da promoção para exibi-la na vitrine.");
+                        return;
+                      }
+                      setSaving(true);
+                      try {
+                        await saveAnnouncement({
+                          ...announcementDraft,
+                          promo_cta_label: "",
+                          promo_cta_type: "vitrine",
+                        });
+                        toast.success("Promoção salva!");
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Erro ao salvar promoção.",
+                        );
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    <Save />
+                    {saving ? "Salvando..." : "Salvar promoção"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={saving}
+                    onClick={async () => {
+                      const next = {
+                        ...announcementDraft,
+                        promo_active: false,
+                        promo_cta_label: "",
+                        promo_cta_type: "vitrine" as const,
+                      };
+                      setAnnouncementDraft(next);
+                      setSaving(true);
+                      try {
+                        await saveAnnouncement(next);
+                        toast.success("Espaço de promoções desativado e oculto da vitrine.");
+                      } catch (err) {
+                        setAnnouncementDraft(data.announcement);
+                        toast.error(
+                          err instanceof Error ? err.message : "Erro ao ocultar promoção.",
+                        );
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                  >
+                    Desativar e ocultar espaço
+                  </Button>
+                </div>
+              </div>
+            </div>
             <div className="flex justify-between items-center mt-12 mb-6">
               <h2 className="text-3xl">Fotos de destaque</h2>
               <Button
                 onClick={() => {
                   setSizeInfo("");
-                  setMobileSizeInfo("");
                   setBanner({
                     id: crypto.randomUUID(),
                     image_url: "",
-                    mobile_image_url: "",
+                    mobile_image_url: null,
                     alt: "Banner Amora Acessórios",
                     active: true,
                     filter: "",
@@ -927,13 +984,12 @@ export function AdminPanel() {
                 <img
                   src={b.image_url}
                   alt={b.alt || "Banner Amora Acessórios"}
-                  className="w-full h-20 object-cover"
+                  className="w-full aspect-video object-cover rounded"
                 />
                 <div>
                   <p className="text-sm font-medium">Banner {i + 1}</p>
                   <p className="text-xs text-muted-foreground mt-2">
                     Ordem {i + 1} · {b.filter || "Sem filtro"}
-                    {b.mobile_image_url?.trim() ? " · Com imagem mobile" : ""}
                   </p>
                   <label className="flex gap-2 items-center mt-2">
                     <input
@@ -990,10 +1046,10 @@ export function AdminPanel() {
                     aria-label="Editar banner"
                     onClick={() => {
                       setSizeInfo("");
-                      setMobileSizeInfo("");
                       setBanner({
                         ...b,
-                        mobile_image_url: b.mobile_image_url ?? "",
+                        mobile_image_url: null,
+                        alt: "Banner Amora Acessórios",
                         display_order: b.display_order ?? i,
                       });
                     }}
@@ -1725,7 +1781,7 @@ export function AdminPanel() {
             <div className="space-y-4">
               <div className="rounded-lg border bg-muted/30 p-3.5 space-y-3">
                 <label>
-                  Foto principal (Desktop — 16:9)
+                  Imagem do banner (16:9)
                   <input
                     type="file"
                     accept="image/*"
@@ -1739,73 +1795,24 @@ export function AdminPanel() {
                 {banner.image_url && (
                   <img
                     src={banner.image_url}
-                    alt="Prévia do banner principal"
-                    className="w-full h-36 object-contain bg-muted rounded"
+                    alt="Prévia do banner"
+                    className="w-full aspect-video object-cover bg-muted rounded"
                   />
                 )}
                 {uploading && <p className="text-xs text-muted-foreground">Enviando foto...</p>}
                 {sizeInfo && (
-                  <p className="text-xs text-muted-foreground">Arquivo original ({sizeInfo})</p>
+                  <p className="text-xs text-muted-foreground">
+                    Arquivo original preservado ({sizeInfo})
+                  </p>
                 )}
                 <label>
                   Ou URL da imagem
                   <input
                     value={banner.image_url.startsWith("data:") ? "" : banner.image_url}
-                    onChange={(e) => setBanner({ ...banner, image_url: e.target.value })}
-                    placeholder="https://..."
-                  />
-                </label>
-              </div>
-              <div className="rounded-lg border bg-muted/30 p-3.5 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    Imagem para Celular (opcional — 4:5 ou 1:1)
-                  </span>
-                  {banner.mobile_image_url && (
-                    <button
-                      type="button"
-                      className="text-[11px] text-destructive hover:underline cursor-pointer"
-                      onClick={() => {
-                        setMobileSizeInfo("");
-                        setBanner({ ...banner, mobile_image_url: "" });
-                      }}
-                    >
-                      Remover
-                    </button>
-                  )}
-                </div>
-                <input
-                  type="file"
-                  aria-label="Imagem para Celular (opcional — 4:5 ou 1:1)"
-                  accept="image/*"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void upload(f, "banner-mobile");
-                  }}
-                />
-                {banner.mobile_image_url && (
-                  <img
-                    src={banner.mobile_image_url}
-                    alt="Prévia do banner para celular"
-                    className="w-full h-36 object-contain bg-muted rounded"
-                  />
-                )}
-                {mobileSizeInfo && (
-                  <p className="text-xs text-muted-foreground">
-                    Arquivo original mobile ({mobileSizeInfo})
-                  </p>
-                )}
-                <label>
-                  Ou URL da imagem para celular
-                  <input
-                    value={
-                      (banner.mobile_image_url ?? "").startsWith("data:")
-                        ? ""
-                        : (banner.mobile_image_url ?? "")
+                    onChange={(e) =>
+                      setBanner({ ...banner, image_url: e.target.value, mobile_image_url: null })
                     }
-                    onChange={(e) => setBanner({ ...banner, mobile_image_url: e.target.value })}
-                    placeholder="Deixe vazio para usar a imagem principal"
+                    placeholder="https://..."
                   />
                 </label>
               </div>
@@ -1836,16 +1843,17 @@ export function AdminPanel() {
                 disabled={saving || uploading}
                 onClick={async () => {
                   if (!banner.image_url.trim()) {
-                    toast.error("Adicione a foto principal do banner.");
+                    toast.error("Adicione a imagem do banner.");
                     return;
                   }
                   setSaving(true);
                   try {
                     await saveBanner({
                       ...banner,
-                      alt: banner.alt.trim() || "Banner Amora Acessórios",
+                      mobile_image_url: null,
+                      alt: "Banner Amora Acessórios",
                     });
-                    cleanupPendingUploads([banner.image_url, banner.mobile_image_url ?? ""]);
+                    cleanupPendingUploads([banner.image_url]);
                     setBanner(null);
                     toast.success("Banner salvo!");
                   } catch (err) {

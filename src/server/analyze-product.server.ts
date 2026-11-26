@@ -40,9 +40,9 @@ interface AttemptFailure {
 }
 
 const DEFAULT_PROVIDER_ORDER: AiProviderName[] = ["groq", "gemini", "openrouter"];
-const DEFAULT_GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+const DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b";
 const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
-const DEFAULT_GEMINI_FALLBACK_MODELS = ["gemini-3.8-flash"];
+const DEFAULT_GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-3.8-flash"];
 const DEFAULT_OPENROUTER_MODELS = ["openrouter/free"];
 
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
@@ -130,7 +130,7 @@ function buildProviderQueue(env: NodeJS.ProcessEnv): ProviderAttempt[] {
         env["GEMINI_FALLBACK_MODELS"] !== undefined
           ? parseCsvList(env["GEMINI_FALLBACK_MODELS"])
           : DEFAULT_GEMINI_FALLBACK_MODELS;
-      const models = parseCsvList([primary, ...fallbacks].join(","));
+      const models = parseCsvList([primary, ...fallbacks, "gemini-2.5-flash"].join(","));
       for (const model of models) {
         queue.push({ provider: "gemini", model, apiKey });
       }

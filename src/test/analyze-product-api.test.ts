@@ -198,6 +198,62 @@ describe("POST /api/analyze-product multi-provider cascade", () => {
     expect(json.error).not.toContain("high demand");
   });
 
+  it("uses active default Groq model (qwen/qwen3.8-27b) and includes gemini-2.5-flash fallback", async () => {
+    process.env["GROQ_API_KEY"] = "groq-test";
+    process.env["GEMINI_API_KEY"] = "gemini-test";
+
+    const calledUrls: string[] = [];
+    const calledBodies: string[] = [];
+    globalThis.fetch = vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      calledUrls.push(url);
+      calledBodies.push(typeof init?.body === "string" ? init.body : "");
+      if (url.includes("gemini-2.5-flash")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        name: "Clutch Dourada Festa",
+                        category: "Aluguel de Bolsas",
+                        material: "Aluguel",
+                        description: "Clutch estruturada ideal para eventos especiais.",
+                        characteristics: [
+                          { label: "Cor", value: "Dourado" },
+                          { label: "Ocasião", value: "Festa" },
+                          { label: "Acabamento", value: "Metalizado" },
+                        ],
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ error: { message: "Overloaded" } }), { status: 503 });
+    });
+
+    const req = new Request("http://localhost/api/analyze-product", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ imageBase64: SAMPLE_BASE64, mimeType: "image/webp" }),
+    });
+
+    const res = await handleAnalyzeProductRequest(req);
+    expect(res.status).toBe(200);
+    expect(calledBodies[0]).toContain("qwen/qwen3.8-27b");
+    expect(calledBodies[0]).not.toContain("llama-4-scout");
+    expect(calledUrls.some((url) => url.includes("gemini-2.5-flash"))).toBe(true);
+    const json = (await res.json()) as { meta: { provider: string; model: string } };
+    expect(json.meta).toEqual({ provider: "gemini", model: "gemini-2.5-flash" });
+  });
+
   it("falls back safely to the first valid category/material when AI returns out-of-list values", () => {
     const parsed = parseAndNormalizeAiJson(
       '```json\n{"name":"Colar Luz","category":"Inexistente","material":"Ouro Maciço","description":"Brilho delicado.","characteristics":[{"label":"Cor","value":"Dourado"}]}\n```',

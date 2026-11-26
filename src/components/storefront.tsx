@@ -18,7 +18,6 @@ import {
   Heart,
   X,
   Gift,
-  Users,
   Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,13 +37,10 @@ import {
   isRentProduct,
   money,
   priceOf,
+  shouldShowPromotion,
   type Product,
 } from "@/data/catalog";
-import {
-  getConsultoriaCampaignStatus,
-  PROMO_WHATSAPP_QUESTION,
-  storeContent,
-} from "@/data/storeContent";
+import { storeContent } from "@/data/storeContent";
 
 function matchesFilter(product: Product, selected: string): boolean {
   if (selected === "Todos") return true;
@@ -132,7 +128,6 @@ export function Storefront() {
   }, [filter, query, sort]);
   const banners = data.banners.filter((b) => b.active);
   const currentSlide = banners.length > 0 ? slide % banners.length : 0;
-  const activeBanner = banners[currentSlide];
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || banners.length < 2) return;
     const timer = setInterval(() => setSlide((s) => (s + 1) % banners.length), 3000);
@@ -211,8 +206,7 @@ export function Storefront() {
   const discount = applied && !totals.error ? totals.discount : 0;
   const total = subtotal - discount;
   const count = cart.reduce((s, i) => s + i.quantity, 0);
-  const promoCampaignActive = data.announcement.promo_campaign_active ?? true;
-  const promoStatus = getConsultoriaCampaignStatus(total);
+  const showPromotion = shouldShowPromotion(data.announcement);
   const scroll = (f: string) => {
     const targetKey = optionLookupKey(f);
     const matched =
@@ -253,7 +247,6 @@ export function Storefront() {
           ]
         : []),
       `Total estimado: ${money(total)}`,
-      ...(promoCampaignActive && promoStatus.checkoutLine ? [promoStatus.checkoutLine] : []),
       "",
       ...(name ? [`Nome: ${name}`] : []),
       ...(city ? [`Bairro/Cidade ou Retirada: ${city}`] : []),
@@ -272,7 +265,8 @@ export function Storefront() {
         <div className="bg-primary text-primary-foreground text-center px-4 py-2.5 text-[10px] sm:text-xs">
           <a
             href={
-              !promoCampaignActive && data.announcement.link === "#promocao"
+              !showPromotion &&
+              (data.announcement.link === "#promocoes" || data.announcement.link === "#promocao")
                 ? "#vitrine"
                 : data.announcement.link || "#vitrine"
             }
@@ -340,35 +334,21 @@ export function Storefront() {
       </header>
       <main>
         <section id="inicio" className="hero">
-          <div
-            className={`hero-media ${
-              activeBanner?.mobile_image_url?.trim()
-                ? "aspect-4/5 max-h-115 md:aspect-auto md:max-h-none"
-                : "aspect-16/10 md:aspect-auto"
-            }`}
-          >
-            {banners.map((b, i) => {
-              const mobileUrl = b.mobile_image_url?.trim() ?? "";
-              return (
-                <picture
-                  key={b.id}
-                  className={`hero-photo block ${i === currentSlide ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-                  onClick={() => b.filter && scroll(b.filter)}
-                >
-                  {mobileUrl && <source media="(max-width: 767px)" srcSet={mobileUrl} />}
-                  <img
-                    src={b.image_url}
-                    alt={b.alt || "Banner Amora Acessórios"}
-                    className={`w-full h-full object-cover ${
-                      mobileUrl ? "object-center" : "object-[72%_center] md:object-center"
-                    }`}
-                    loading={i === 0 ? "eager" : "lazy"}
-                    fetchPriority={i === 0 ? "high" : "auto"}
-                    decoding="async"
-                  />
-                </picture>
-              );
-            })}
+          <div className="hero-media aspect-video md:aspect-auto">
+            {banners.map((b, i) => (
+              <img
+                key={b.id}
+                src={b.image_url}
+                alt={b.alt || "Banner Amora Acessórios"}
+                onClick={() => b.filter && scroll(b.filter)}
+                className={`hero-photo w-full h-full object-cover object-center ${
+                  i === currentSlide ? "opacity-100" : "opacity-0 pointer-events-none"
+                }`}
+                loading={i === 0 ? "eager" : "lazy"}
+                fetchPriority={i === 0 ? "high" : "auto"}
+                decoding="async"
+              />
+            ))}
             <div className="hero-scrim pointer-events-none" />
             <div
               aria-hidden="true"
@@ -444,94 +424,30 @@ export function Storefront() {
             })}
           </div>
         </div>
-        {promoCampaignActive && (
-          <section id="promocao" className="shell pt-12 md:pt-16 scroll-mt-24">
-            <div className="relative overflow-hidden rounded-2xl bg-primary text-primary-foreground border border-gold/45 shadow-sm px-6 py-10 sm:px-10 sm:py-12 md:px-14 md:py-14">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-3 sm:inset-4 rounded-xl border border-gold-light/20"
-              />
-              <div className="relative max-w-4xl mx-auto text-center">
-                <p className="inline-flex items-center gap-2 rounded-full border border-gold-light/45 bg-primary-hover/70 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-gold-light">
-                  <Sparkles size={12} className="text-gold-light shrink-0" />
-                  CAMPANHA ESPECIAL DA SEMANA
-                </p>
-                <h2 className="font-display text-3xl sm:text-4xl md:text-[42px] leading-[1.15] text-primary-foreground mt-5 max-w-3xl mx-auto">
-                  Já pensou em aprender a escolher os produtos certos para você e ainda descobrir
-                  como se maquiar sozinha?
+        {showPromotion && (
+          <section id="promocoes" className="shell pt-12 md:pt-16 scroll-mt-24">
+            <div className="relative overflow-hidden rounded-2xl bg-linear-to-br from-[#F3ECE2] to-[#FCF9F5] border border-[#B88B58]/30 shadow-xs px-6 py-8 sm:px-10 sm:py-10 md:px-14 md:py-12">
+              <div className="max-w-2xl mx-auto text-center">
+                {data.announcement.promo_badge.trim() && (
+                  <p className="inline-flex items-center gap-2 rounded-full border border-[#B88B58]/35 bg-background/85 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
+                    <Sparkles size={13} className="text-gold shrink-0" />
+                    <span>{data.announcement.promo_badge}</span>
+                  </p>
+                )}
+                <h2 className="font-display text-3xl sm:text-4xl md:text-[42px] leading-[1.15] text-primary mt-4">
+                  {data.announcement.promo_title}
                 </h2>
-                <div className="grid md:grid-cols-2 gap-4 sm:gap-6 mt-8 sm:mt-10 text-left">
-                  <div className="rounded-xl bg-background text-foreground border border-gold-light/70 p-6 sm:p-7 flex flex-col justify-between shadow-xs">
-                    <div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">
-                          Opção 1
-                        </span>
-                        <span className="rounded-full bg-secondary border border-gold-light/70 px-3 py-1 text-[11px] font-semibold text-primary">
-                          A partir de R$ 150
-                        </span>
-                      </div>
-                      <h3 className="text-2xl text-primary mt-3 flex items-center gap-2">
-                        <Gift size={18} className="text-gold shrink-0" />
-                        Compra Individual
-                      </h3>
-                      <p className="text-xs sm:text-sm text-muted-foreground leading-6 mt-3">
-                        Nas compras a partir de <strong className="text-foreground">R$ 150</strong>{" "}
-                        em qualquer produto da loja, você ganha uma{" "}
-                        <strong className="text-primary">consultoria exclusiva</strong> para
-                        aprender a escolher os produtos certos e se maquiar sozinha.
-                      </p>
-                    </div>
+                {data.announcement.promo_description.trim() && (
+                  <p className="text-sm sm:text-[15px] text-foreground/85 leading-7 whitespace-pre-line mt-5 max-w-xl mx-auto text-left sm:text-center">
+                    {data.announcement.promo_description}
+                  </p>
+                )}
+                {data.announcement.promo_highlight.trim() && (
+                  <div className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl border border-[#B88B58]/35 bg-background/90 px-4 py-2.5 text-xs font-medium text-primary">
+                    <Gift size={14} className="text-gold shrink-0" />
+                    <span>{data.announcement.promo_highlight}</span>
                   </div>
-                  <div className="rounded-xl bg-secondary text-foreground border border-gold/65 p-6 sm:p-7 flex flex-col justify-between shadow-xs">
-                    <div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">
-                          Opção 2
-                        </span>
-                        <span className="rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground">
-                          R$ 100 cada · Em dupla
-                        </span>
-                      </div>
-                      <h3 className="text-2xl text-primary mt-3 flex items-center gap-2">
-                        <Users size={18} className="text-gold shrink-0" />
-                        Veio com uma Amiga?
-                      </h3>
-                      <p className="text-xs sm:text-sm text-muted-foreground leading-6 mt-3">
-                        Se cada uma comprar a partir de{" "}
-                        <strong className="text-foreground">R$ 100</strong>,{" "}
-                        <strong className="text-primary">as duas ganham</strong> a consultoria de
-                        automaquiagem!
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-3 mt-8 sm:mt-10">
-                  <Button
-                    size="lg"
-                    className="bg-gold-light text-foreground hover:bg-background hover:text-primary font-semibold shadow-sm"
-                    onClick={() =>
-                      document.getElementById("vitrine")?.scrollIntoView({ behavior: "smooth" })
-                    }
-                  >
-                    Escolher minhas peças <ArrowRight />
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    className="border border-gold-light/45 text-primary-foreground hover:bg-primary-hover hover:text-gold-light"
-                    asChild
-                  >
-                    <a
-                      href={`${storeContent.whatsapp}?text=${encodeURIComponent(PROMO_WHATSAPP_QUESTION)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <MessageCircle />
-                      Tirar dúvidas no WhatsApp
-                    </a>
-                  </Button>
-                </div>
+                )}
               </div>
             </div>
           </section>
@@ -1097,48 +1013,6 @@ export function Storefront() {
           <DialogDescription className="text-xs mt-2">
             Retirada no Olaria, Timóteo ou entrega combinada no WhatsApp.
           </DialogDescription>
-          {promoCampaignActive && cart.length > 0 && (
-            <div
-              className={`mt-4 rounded-lg border px-3.5 py-3 text-xs leading-5 transition-colors ${
-                promoStatus.tier === "individual"
-                  ? "border-gold/60 bg-primary text-primary-foreground"
-                  : promoStatus.tier === "friend"
-                    ? "border-gold/70 bg-secondary text-foreground"
-                    : "border-gold-light/80 bg-secondary/80 text-foreground"
-              }`}
-            >
-              <p className="font-medium">{promoStatus.cartMessage}</p>
-              <div className="mt-2.5">
-                <div
-                  className={`relative h-1.5 w-full rounded-full overflow-hidden ${
-                    promoStatus.tier === "individual" ? "bg-primary-hover" : "bg-border"
-                  }`}
-                >
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      promoStatus.tier === "individual" ? "bg-gold-light" : "bg-gold"
-                    }`}
-                    style={{ width: `${Math.max(4, promoStatus.progressPercent)}%` }}
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="absolute top-0 bottom-0 left-2/3 w-px bg-background/80"
-                  />
-                </div>
-                <div
-                  className={`mt-1.5 flex justify-between text-[10px] ${
-                    promoStatus.tier === "individual"
-                      ? "text-gold-light"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  <span>R$ 0</span>
-                  <span>Amiga R$ 100</span>
-                  <span>Individual R$ 150</span>
-                </div>
-              </div>
-            </div>
-          )}
           <div className="flex-1 overflow-y-auto min-h-0 py-5">
             {!cart.length ? (
               <div className="text-center py-14">

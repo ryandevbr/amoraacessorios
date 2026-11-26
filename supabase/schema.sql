@@ -60,13 +60,19 @@ create table if not exists public.hero_banners (
   updated_at timestamptz not null default now()
 );
 
--- Configurações públicas da loja, barra de avisos e campanha promocional (registro único id = 1)
+-- Configurações públicas da loja, barra de avisos e espaço de promoções (registro único id = 1)
 create table if not exists public.store_settings (
   id integer primary key default 1 check (id = 1),
   announcement_active boolean not null default true,
   announcement_text text not null default '',
-  announcement_link text not null default '#promocao',
-  promo_campaign_active boolean not null default true,
+  announcement_link text not null default '#promocoes',
+  promo_active boolean not null default true,
+  promo_badge text not null default 'CAMPANHA ESPECIAL DA SEMANA',
+  promo_title text not null default 'Ganhe uma Consultoria de Automaquiagem!',
+  promo_description text not null default E'Já pensou em aprender a escolher os produtos certos para você e ainda descobrir como se maquiar sozinha?\n\n• Nas compras a partir de R$ 150 em qualquer produto da loja, você ganha uma consultoria exclusiva.\n• Veio com uma amiga? Se cada uma comprar a partir de R$ 100, as duas ganham a consultoria!',
+  promo_highlight text not null default 'Válido por tempo limitado',
+  promo_cta_label text not null default '',
+  promo_cta_type text not null default 'vitrine' check (promo_cta_type in ('vitrine', 'whatsapp')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -177,14 +183,26 @@ insert into public.store_settings (
   announcement_active,
   announcement_text,
   announcement_link,
-  promo_campaign_active
+  promo_active,
+  promo_badge,
+  promo_title,
+  promo_description,
+  promo_highlight,
+  promo_cta_label,
+  promo_cta_type
 )
 values (
   1,
   true,
   '✨ Ganhe uma Consultoria de Automaquiagem nas compras a partir de R$ 150 (ou R$ 100 cada com uma amiga)!',
-  '#promocao',
-  true
+  '#promocoes',
+  true,
+  'CAMPANHA ESPECIAL DA SEMANA',
+  'Ganhe uma Consultoria de Automaquiagem!',
+  E'Já pensou em aprender a escolher os produtos certos para você e ainda descobrir como se maquiar sozinha?\n\n• Nas compras a partir de R$ 150 em qualquer produto da loja, você ganha uma consultoria exclusiva.\n• Veio com uma amiga? Se cada uma comprar a partir de R$ 100, as duas ganham a consultoria!',
+  'Válido por tempo limitado',
+  '',
+  'vitrine'
 )
 on conflict (id) do nothing;
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  DEFAULT_STORE_PROMOTION,
   emptyStoreData,
   initialData,
   resolveListingType,
@@ -9,8 +10,9 @@ import {
   type Product,
   type ProductCharacteristic,
   type ProductListingType,
-  type StoreAnnouncement,
+  type PromoCtaType,
   type StoreData,
+  type StoreSettings,
 } from "@/data/catalog";
 import { isSupabaseConfigured, requireSupabase, supabase } from "@/lib/supabase";
 import { normalizeCode } from "@/services/couponService";
@@ -19,21 +21,62 @@ import { deleteStoreImage } from "@/services/storageService";
 const KEY = "amora-acessorios-store-v1";
 const STORE_EVENT = "amora-store";
 const DEFAULT_BANNER_ALT = "Banner Amora Acessórios";
-const PROMO_FALLBACK_KEY = "amora-promo-campaign-v1";
+const PROMO_FALLBACK_KEY = "amora-store-promo-fallback-v1";
 
-function readLocalPromoFallback(): boolean {
-  if (typeof window === "undefined") return true;
+type PromoFields = Pick<
+  StoreSettings,
+  | "promo_active"
+  | "promo_badge"
+  | "promo_title"
+  | "promo_description"
+  | "promo_highlight"
+  | "promo_cta_label"
+  | "promo_cta_type"
+>;
+
+function normalizePromoCtaType(raw: unknown): PromoCtaType {
+  return raw === "whatsapp" ? "whatsapp" : "vitrine";
+}
+
+function readLocalPromoFallback(): PromoFields {
+  if (typeof window === "undefined") return { ...DEFAULT_STORE_PROMOTION };
   try {
-    return window.localStorage.getItem(PROMO_FALLBACK_KEY) !== "false";
+    const raw = window.localStorage.getItem(PROMO_FALLBACK_KEY);
+    if (!raw) return { ...DEFAULT_STORE_PROMOTION };
+    const parsed = JSON.parse(raw) as Partial<PromoFields>;
+    return {
+      promo_active:
+        typeof parsed.promo_active === "boolean"
+          ? parsed.promo_active
+          : DEFAULT_STORE_PROMOTION.promo_active,
+      promo_badge:
+        typeof parsed.promo_badge === "string"
+          ? parsed.promo_badge
+          : DEFAULT_STORE_PROMOTION.promo_badge,
+      promo_title:
+        typeof parsed.promo_title === "string"
+          ? parsed.promo_title
+          : DEFAULT_STORE_PROMOTION.promo_title,
+      promo_description:
+        typeof parsed.promo_description === "string"
+          ? parsed.promo_description
+          : DEFAULT_STORE_PROMOTION.promo_description,
+      promo_highlight:
+        typeof parsed.promo_highlight === "string"
+          ? parsed.promo_highlight
+          : DEFAULT_STORE_PROMOTION.promo_highlight,
+      promo_cta_label: "",
+      promo_cta_type: normalizePromoCtaType(parsed.promo_cta_type),
+    };
   } catch {
-    return true;
+    return { ...DEFAULT_STORE_PROMOTION };
   }
 }
 
-function writeLocalPromoFallback(active: boolean) {
+function writeLocalPromoFallback(promo: PromoFields) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(PROMO_FALLBACK_KEY, String(active));
+    window.localStorage.setItem(PROMO_FALLBACK_KEY, JSON.stringify(promo));
   } catch {}
 }
 
@@ -42,7 +85,7 @@ function isMissingPromoColumnError(error: { code?: string; message?: string } | 
   return (
     error.code === "42703" ||
     error.code === "PGRST204" ||
-    (error.message ?? "").includes("promo_campaign_active")
+    (error.message ?? "").includes("promo_")
   );
 }
 
@@ -93,7 +136,13 @@ interface StoreSettingsRow {
   announcement_active: boolean;
   announcement_text: string | null;
   announcement_link: string | null;
-  promo_campaign_active?: boolean | null;
+  promo_active?: boolean | null;
+  promo_badge?: string | null;
+  promo_title?: string | null;
+  promo_description?: string | null;
+  promo_highlight?: string | null;
+  promo_cta_label?: string | null;
+  promo_cta_type?: string | null;
 }
 
 interface CouponRow {
@@ -152,7 +201,7 @@ function mapBannerRow(row: HeroBannerRow, fallbackIndex: number): Banner {
   return {
     id: row.id,
     image_url: row.image_url,
-    mobile_image_url: row.mobile_image_url ?? "",
+    mobile_image_url: null,
     alt: row.alt?.trim() || DEFAULT_BANNER_ALT,
     active: Boolean(row.active),
     filter: row.filter ?? "",
@@ -200,12 +249,11 @@ function toProductPayload(product: Product) {
 }
 
 function toBannerPayload(banner: Banner, displayOrder: number) {
-  const mobileUrl = (banner.mobile_image_url ?? "").trim();
   return {
     id: banner.id || crypto.randomUUID(),
     image_url: banner.image_url.trim(),
-    mobile_image_url: mobileUrl ? mobileUrl : null,
-    alt: banner.alt.trim() || DEFAULT_BANNER_ALT,
+    mobile_image_url: null,
+    alt: DEFAULT_BANNER_ALT,
     active: Boolean(banner.active),
     filter: banner.filter.trim(),
     display_order: displayOrder,
@@ -243,14 +291,36 @@ export function loadStore(): StoreData {
           listing_type: resolveListingType(p.listing_type, p.category, p.material),
         }))
       : structuredClone(initialData.products);
+    const parsedAnnouncement = parsed.announcement as Partial<StoreSettings> | undefined;
     return {
       ...initialData,
       ...parsed,
       products,
       announcement: {
         ...initialData.announcement,
-        ...parsed.announcement,
-        promo_campaign_active: parsed.announcement?.promo_campaign_active ?? true,
+        ...parsedAnnouncement,
+        promo_active:
+          typeof parsedAnnouncement?.promo_active === "boolean"
+            ? parsedAnnouncement.promo_active
+            : DEFAULT_STORE_PROMOTION.promo_active,
+        promo_badge:
+          typeof parsedAnnouncement?.promo_badge === "string"
+            ? parsedAnnouncement.promo_badge
+            : DEFAULT_STORE_PROMOTION.promo_badge,
+        promo_title:
+          typeof parsedAnnouncement?.promo_title === "string"
+            ? parsedAnnouncement.promo_title
+            : DEFAULT_STORE_PROMOTION.promo_title,
+        promo_description:
+          typeof parsedAnnouncement?.promo_description === "string"
+            ? parsedAnnouncement.promo_description
+            : DEFAULT_STORE_PROMOTION.promo_description,
+        promo_highlight:
+          typeof parsedAnnouncement?.promo_highlight === "string"
+            ? parsedAnnouncement.promo_highlight
+            : DEFAULT_STORE_PROMOTION.promo_highlight,
+        promo_cta_label: "",
+        promo_cta_type: normalizePromoCtaType(parsedAnnouncement?.promo_cta_type),
       },
     };
   } catch {
@@ -261,6 +331,28 @@ export function loadStore(): StoreData {
 export function saveStore(data: StoreData) {
   localStorage.setItem(KEY, JSON.stringify(data));
   notifyStoreChanged();
+}
+
+const STORE_SETTINGS_COLUMNS =
+  "id, announcement_active, announcement_text, announcement_link, promo_active, promo_badge, promo_title, promo_description, promo_highlight, promo_cta_label, promo_cta_type";
+
+function mapStoreSettingsRow(row: StoreSettingsRow, fallbackPromo?: PromoFields): StoreSettings {
+  const promo: PromoFields = fallbackPromo ?? {
+    promo_active: Boolean(row.promo_active ?? DEFAULT_STORE_PROMOTION.promo_active),
+    promo_badge: row.promo_badge ?? DEFAULT_STORE_PROMOTION.promo_badge,
+    promo_title: row.promo_title ?? DEFAULT_STORE_PROMOTION.promo_title,
+    promo_description: row.promo_description ?? DEFAULT_STORE_PROMOTION.promo_description,
+    promo_highlight: row.promo_highlight ?? DEFAULT_STORE_PROMOTION.promo_highlight,
+    promo_cta_label: row.promo_cta_label ?? "",
+    promo_cta_type: normalizePromoCtaType(row.promo_cta_type),
+  };
+
+  return {
+    active: Boolean(row.announcement_active),
+    text: row.announcement_text ?? "",
+    link: row.announcement_link ?? "#vitrine",
+    ...promo,
+  };
 }
 
 export async function fetchStoreData(scope: StoreScope = "public"): Promise<StoreData> {
@@ -295,7 +387,7 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
 
   const settingsQuery = supabase
     .from("store_settings")
-    .select("id, announcement_active, announcement_text, announcement_link, promo_campaign_active")
+    .select(STORE_SETTINGS_COLUMNS)
     .eq("id", 1)
     .maybeSingle();
 
@@ -374,16 +466,9 @@ export async function fetchStoreData(scope: StoreScope = "public"): Promise<Stor
     }
   }
 
-  const announcement: StoreAnnouncement = settingsRow
-    ? {
-        active: Boolean(settingsRow.announcement_active),
-        text: settingsRow.announcement_text ?? "",
-        link: settingsRow.announcement_link ?? "#vitrine",
-        promo_campaign_active: usedPromoFallback
-          ? readLocalPromoFallback()
-          : Boolean(settingsRow.promo_campaign_active ?? true),
-      }
-    : { ...emptyStoreData.announcement, promo_campaign_active: readLocalPromoFallback() };
+  const announcement: StoreSettings = settingsRow
+    ? mapStoreSettingsRow(settingsRow, usedPromoFallback ? readLocalPromoFallback() : undefined)
+    : { ...emptyStoreData.announcement, ...readLocalPromoFallback() };
 
   let profile: AdminProfile = { ...emptyStoreData.profile };
   if (scope === "admin") {
@@ -549,25 +634,33 @@ export async function removeBanner(id: string, imageUrlsToClean: string[] = []):
 }
 
 export async function saveStoreAnnouncement(
-  announcement: StoreAnnouncement,
-): Promise<StoreAnnouncement> {
+  announcement: StoreSettings,
+): Promise<StoreSettings> {
   const client = requireSupabase();
-  const promoActive = Boolean(announcement.promo_campaign_active);
   const basePayload = {
     id: 1,
     announcement_active: Boolean(announcement.active),
     announcement_text: announcement.text.trim(),
     announcement_link: announcement.link.trim() || "#vitrine",
   };
+  const promoPayload: PromoFields = {
+    promo_active: Boolean(announcement.promo_active),
+    promo_badge: announcement.promo_badge.trim(),
+    promo_title: announcement.promo_title.trim(),
+    promo_description: announcement.promo_description.trim(),
+    promo_highlight: announcement.promo_highlight.trim(),
+    promo_cta_label: "",
+    promo_cta_type: "vitrine",
+  };
 
   const { data, error } = await client
     .from("store_settings")
-    .upsert({ ...basePayload, promo_campaign_active: promoActive }, { onConflict: "id" })
-    .select("id, announcement_active, announcement_text, announcement_link, promo_campaign_active")
+    .upsert({ ...basePayload, ...promoPayload }, { onConflict: "id" })
+    .select(STORE_SETTINGS_COLUMNS)
     .single();
 
   if (error && isMissingPromoColumnError(error)) {
-    writeLocalPromoFallback(promoActive);
+    writeLocalPromoFallback(promoPayload);
     const fallback = await client
       .from("store_settings")
       .upsert(basePayload, { onConflict: "id" })
@@ -580,28 +673,24 @@ export async function saveStoreAnnouncement(
       );
     }
 
-    const fallbackRow = fallback.data as StoreSettingsRow;
-    return {
-      active: Boolean(fallbackRow.announcement_active),
-      text: fallbackRow.announcement_text ?? "",
-      link: fallbackRow.announcement_link ?? "#vitrine",
-      promo_campaign_active: promoActive,
-    };
+    return mapStoreSettingsRow(fallback.data as StoreSettingsRow, promoPayload);
   }
 
   if (error || !data) {
-    throw new Error(`Erro ao salvar barra de avisos: ${error?.message ?? "resposta vazia"}`);
+    throw new Error(`Erro ao salvar configurações da loja: ${error?.message ?? "resposta vazia"}`);
   }
 
-  const row = data as StoreSettingsRow;
-  const persistedPromo = Boolean(row.promo_campaign_active ?? promoActive);
-  writeLocalPromoFallback(persistedPromo);
-  return {
-    active: Boolean(row.announcement_active),
-    text: row.announcement_text ?? "",
-    link: row.announcement_link ?? "#vitrine",
-    promo_campaign_active: persistedPromo,
-  };
+  const mapped = mapStoreSettingsRow(data as StoreSettingsRow);
+  writeLocalPromoFallback({
+    promo_active: mapped.promo_active,
+    promo_badge: mapped.promo_badge,
+    promo_title: mapped.promo_title,
+    promo_description: mapped.promo_description,
+    promo_highlight: mapped.promo_highlight,
+    promo_cta_label: "",
+    promo_cta_type: "vitrine",
+  });
+  return mapped;
 }
 
 export async function upsertCoupon(coupon: Coupon): Promise<Coupon> {
@@ -819,7 +908,8 @@ export function useStore(options?: { scope?: StoreScope; enabled?: boolean }) {
       if (!isSupabaseConfigured) {
         const bannerWithOrder: Banner = {
           ...banner,
-          alt: banner.alt.trim() || DEFAULT_BANNER_ALT,
+          mobile_image_url: null,
+          alt: DEFAULT_BANNER_ALT,
           display_order: displayOrder,
         };
         const next: StoreData = {
@@ -919,15 +1009,20 @@ export function useStore(options?: { scope?: StoreScope; enabled?: boolean }) {
   );
 
   const saveAnnouncement = useCallback(
-    async (announcement: StoreAnnouncement) => {
+    async (announcement: StoreSettings) => {
+      const normalized: StoreSettings = {
+        ...announcement,
+        promo_cta_label: "",
+        promo_cta_type: "vitrine",
+      };
       if (!isSupabaseConfigured) {
-        const next: StoreData = { ...data, announcement };
+        const next: StoreData = { ...data, announcement: normalized };
         saveStore(next);
         setData(next);
         return;
       }
 
-      const saved = await saveStoreAnnouncement(announcement);
+      const saved = await saveStoreAnnouncement(normalized);
       setData((prev) => ({ ...prev, announcement: saved }));
       notifyStoreChanged();
     },

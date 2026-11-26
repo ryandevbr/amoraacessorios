@@ -35,18 +35,54 @@ export interface Coupon {
 export interface Banner {
   id: string;
   image_url: string;
-  mobile_image_url?: string;
+  mobile_image_url?: string | null;
   alt: string;
   active: boolean;
   filter: string;
   display_order?: number;
 }
-export interface StoreAnnouncement {
+export type PromoCtaType = "vitrine" | "whatsapp";
+
+export interface StoreSettings {
   active: boolean;
   text: string;
   link: string;
-  promo_campaign_active: boolean;
+  promo_active: boolean;
+  promo_badge: string;
+  promo_title: string;
+  promo_description: string;
+  promo_highlight: string;
+  promo_cta_label: string;
+  promo_cta_type: PromoCtaType;
 }
+export type StoreAnnouncement = StoreSettings;
+
+export const DEFAULT_STORE_PROMOTION: Pick<
+  StoreSettings,
+  | "promo_active"
+  | "promo_badge"
+  | "promo_title"
+  | "promo_description"
+  | "promo_highlight"
+  | "promo_cta_label"
+  | "promo_cta_type"
+> = {
+  promo_active: true,
+  promo_badge: "CAMPANHA ESPECIAL DA SEMANA",
+  promo_title: "Ganhe uma Consultoria de Automaquiagem!",
+  promo_description:
+    "Já pensou em aprender a escolher os produtos certos para você e ainda descobrir como se maquiar sozinha?\n\n• Nas compras a partir de R$ 150 em qualquer produto da loja, você ganha uma consultoria exclusiva.\n• Veio com uma amiga? Se cada uma comprar a partir de R$ 100, as duas ganham a consultoria!",
+  promo_highlight: "Válido por tempo limitado",
+  promo_cta_label: "",
+  promo_cta_type: "vitrine",
+};
+
+export function shouldShowPromotion(
+  settings: Pick<StoreSettings, "promo_active" | "promo_title">,
+): boolean {
+  return Boolean(settings.promo_active) && settings.promo_title.trim() !== "";
+}
+
 export interface AdminProfile {
   name: string;
   email: string;
@@ -56,14 +92,25 @@ export interface StoreData {
   products: Product[];
   coupons: Coupon[];
   banners: Banner[];
-  announcement: StoreAnnouncement;
+  announcement: StoreSettings;
   profile: AdminProfile;
 }
 export const emptyStoreData: StoreData = {
   products: [],
   coupons: [],
   banners: [],
-  announcement: { active: false, text: "", link: "#vitrine", promo_campaign_active: true },
+  announcement: {
+    active: false,
+    text: "",
+    link: "#vitrine",
+    promo_active: false,
+    promo_badge: "",
+    promo_title: "",
+    promo_description: "",
+    promo_highlight: "",
+    promo_cta_label: "",
+    promo_cta_type: "vitrine",
+  },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
 
@@ -371,8 +418,8 @@ export const initialData: StoreData = {
   announcement: {
     active: true,
     text: "✨ Ganhe uma Consultoria de Automaquiagem nas compras a partir de R$ 150 (ou R$ 100 cada com uma amiga)!",
-    link: "#promocao",
-    promo_campaign_active: true,
+    link: "#promocoes",
+    ...DEFAULT_STORE_PROMOTION,
   },
   profile: { name: "Administradora", email: "", avatar: "" },
 };

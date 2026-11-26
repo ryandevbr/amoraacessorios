@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  Clock,
   ImagePlus,
   Loader2,
   RefreshCw,
@@ -19,19 +20,23 @@ import {
   type Product,
   type ProductListingType,
 } from "@/data/catalog";
+import { runBatchWithAutoRetries } from "@/lib/batch-retry";
 import { normalizeImageFile } from "@/lib/normalize-image";
 import { analyzeProductWithAi } from "@/services/aiProductService";
 import { optionLookupKey } from "@/services/catalogOptionsService";
 import { deleteStoreImage, uploadStoreImage } from "@/services/storageService";
 
-type QueueItemStatus = "queued" | "analyzing" | "uploading" | "done" | "failed";
+type QueueItemStatus = "queued" | "retrying" | "analyzing" | "uploading" | "done" | "failed";
 
 interface BatchQueueItem {
   id: string;
+  productId: string;
   file: File;
   originalName: string;
   previewUrl: string;
   status: QueueItemStatus;
+  attempt: 1 | 2 | 3;
+  uploadedImageUrl?: string;
   createdName?: string;
   error?: string;
 }
@@ -42,12 +47,6 @@ export interface BatchImportDialogProps {
   availableCategories: string[];
   availableMaterials: string[];
   onSaveProduct: (product: Product) => Promise<void>;
-}
-
-const STEP_DELAY_MS = 800;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function matchOption(value: string, options: string[], fallback: string): string {
@@ -74,6 +73,7 @@ export function BatchImportDialog({
   const [converting, setConverting] = useState(false);
   const [convertingProgress, setConvertingProgress] = useState({ current: 0, total: 0 });
   const [running, setRunning] = useState(false);
+  const [countdownMessage, setCountdownMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef<BatchQueueItem[]>(items);
@@ -81,22 +81,25 @@ export function BatchImportDialog({
 
   itemsRef.current = items;
 
-  const revokeAllPreviews = (list: BatchQueueItem[]) => {
+  const cleanupItemsResources = (list: BatchQueueItem[]) => {
     for (const item of list) {
       URL.revokeObjectURL(item.previewUrl);
+      if (item.status !== "done" && item.uploadedImageUrl) {
+        void deleteStoreImage(item.uploadedImageUrl);
+      }
     }
   };
 
   useEffect(() => {
     return () => {
       runSessionRef.current += 1;
-      revokeAllPreviews(itemsRef.current);
+      cleanupItemsResources(itemsRef.current);
     };
   }, []);
 
   const resetModal = () => {
     runSessionRef.current += 1;
-    revokeAllPreviews(itemsRef.current);
+    cleanupItemsResources(itemsRef.current);
     setStep(1);
     setListingType("sale");
     setPrice("");
@@ -107,6 +110,7 @@ export function BatchImportDialog({
     setConverting(false);
     setConvertingProgress({ current: 0, total: 0 });
     setRunning(false);
+    setCountdownMessage(null);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -145,10 +149,12 @@ export function BatchImportDialog({
         const previewUrl = URL.createObjectURL(normalized);
         readyItems.push({
           id: crypto.randomUUID(),
+          productId: crypto.randomUUID(),
           file: normalized,
           originalName: rawFile.name,
           previewUrl,
           status: "queued",
+          attempt: 1,
         });
       } catch {
         failedConversions += 1;
@@ -175,118 +181,157 @@ export function BatchImportDialog({
       const target = prev.find((item) => item.id === id);
       if (target) {
         URL.revokeObjectURL(target.previewUrl);
+        if (target.status !== "done" && target.uploadedImageUrl) {
+          void deleteStoreImage(target.uploadedImageUrl);
+        }
       }
       return prev.filter((item) => item.id !== id);
     });
   };
 
-  const updateItem = (id: string, patch: Partial<BatchQueueItem>) => {
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  const updateItem = (
+    id: string,
+    patch: Partial<BatchQueueItem>,
+    options?: { clearError?: boolean },
+  ) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const base = options?.clearError
+          ? (({ error: _removed, ...rest }) => rest)(item)
+          : item;
+        return { ...base, ...patch };
+      }),
+    );
   };
 
   const processQueue = async (targetIds: string[]) => {
-    if (targetIds.length === 0 || !priceValid) return;
+    const eligibleIds = targetIds.filter((id) => {
+      const item = itemsRef.current.find((entry) => entry.id === id);
+      return Boolean(item && item.status !== "done");
+    });
+    if (eligibleIds.length === 0 || !priceValid) return;
 
     const sessionId = ++runSessionRef.current;
     setStep(3);
     setRunning(true);
+    setCountdownMessage(null);
 
-    const targetSet = new Set(targetIds);
+    const eligibleSet = new Set(eligibleIds);
     setItems((prev) =>
       prev.map((item) => {
-        if (!targetSet.has(item.id)) return item;
+        if (!eligibleSet.has(item.id)) return item;
         const { error: _ignoredError, ...rest } = item;
-        return { ...rest, status: "queued" };
+        return { ...rest, status: "queued", attempt: 1 };
       }),
     );
 
-    const queueSnapshot = itemsRef.current.filter((item) => targetSet.has(item.id));
-    let publishedNow = 0;
-    let failedNow = 0;
-
-    for (let index = 0; index < queueSnapshot.length; index += 1) {
-      if (sessionId !== runSessionRef.current) return;
-      const current = queueSnapshot[index];
-      if (!current) continue;
-
-      let uploadedImageUrl: string | null = null;
-      try {
-        updateItem(current.id, { status: "analyzing" });
-
-        const analysis = await analyzeProductWithAi({
-          file: current.file,
-          availableCategories:
-            availableCategories.length > 0 ? availableCategories : ["Semijoias"],
-          availableMaterials: availableMaterials.length > 0 ? availableMaterials : ["Semijoia"],
-        });
-
+    const result = await runBatchWithAutoRetries(eligibleIds, {
+      isCancelled: () => sessionId !== runSessionRef.current,
+      onCountdownTick: (message) => {
+        if (sessionId === runSessionRef.current) {
+          setCountdownMessage(message);
+        }
+      },
+      onPrepareRetryRound: (failedIds, round) => {
         if (sessionId !== runSessionRef.current) return;
-        updateItem(current.id, { status: "uploading" });
+        const retrySet = new Set(failedIds);
+        setItems((prev) =>
+          prev.map((item) =>
+            retrySet.has(item.id) && item.status !== "done"
+              ? { ...item, status: "retrying", attempt: round.attempt }
+              : item,
+          ),
+        );
+      },
+      processItem: async (itemId, attempt) => {
+        const current = itemsRef.current.find((item) => item.id === itemId);
+        if (!current) return false;
+        if (current.status === "done") return true;
 
-        const uploaded = await uploadStoreImage(current.file, "products");
-        uploadedImageUrl = uploaded.url;
+        try {
+          updateItem(current.id, { status: "analyzing", attempt }, { clearError: true });
 
-        if (sessionId !== runSessionRef.current) {
-          await deleteStoreImage(uploadedImageUrl);
-          return;
+          const analysis = await analyzeProductWithAi({
+            file: current.file,
+            availableCategories:
+              availableCategories.length > 0 ? availableCategories : ["Semijoias"],
+            availableMaterials: availableMaterials.length > 0 ? availableMaterials : ["Semijoia"],
+          });
+
+          if (sessionId !== runSessionRef.current) return false;
+          updateItem(current.id, { status: "uploading", attempt });
+
+          let imageUrl = current.uploadedImageUrl;
+          if (!imageUrl) {
+            const uploaded = await uploadStoreImage(current.file, "products");
+            imageUrl = uploaded.url;
+            if (sessionId !== runSessionRef.current) {
+              void deleteStoreImage(imageUrl);
+              return false;
+            }
+            updateItem(current.id, { uploadedImageUrl: imageUrl });
+          }
+
+          const fallbackCategory = availableCategories[0] ?? "Semijoias";
+          const fallbackMaterial = availableMaterials[0] ?? "Semijoia";
+          const finalCategory = category
+            ? category
+            : matchOption(analysis.category, availableCategories, fallbackCategory);
+          const finalMaterial = material
+            ? material
+            : matchOption(analysis.material, availableMaterials, fallbackMaterial);
+          const finalListingType: ProductListingType =
+            listingType === "rent"
+              ? "rent"
+              : resolveListingType("sale", finalCategory, finalMaterial);
+
+          const product: Product = {
+            id: current.productId,
+            name: analysis.name.trim() || current.originalName.replace(/\.[^.]+$/, ""),
+            sku: "",
+            category: finalCategory,
+            material: finalMaterial,
+            listing_type: finalListingType,
+            price: parsedPrice,
+            sale_price: 0,
+            is_on_sale: false,
+            sale_label: "",
+            image_url: imageUrl,
+            description: analysis.description.trim(),
+            active: autoPublish,
+            featured: false,
+            in_stock: true,
+            characteristics: analysis.characteristics.map((c) => ({
+              attribute: c.label,
+              value: c.value,
+            })),
+          };
+
+          await onSaveProduct(product);
+          updateItem(
+            current.id,
+            { status: "done", attempt, createdName: product.name, uploadedImageUrl: imageUrl },
+            { clearError: true },
+          );
+          return true;
+        } catch (err) {
+          updateItem(current.id, {
+            status: "failed",
+            attempt,
+            error: err instanceof Error ? err.message : "Erro ao processar esta foto.",
+          });
+          return false;
         }
+      },
+    });
 
-        const fallbackCategory = availableCategories[0] ?? "Semijoias";
-        const fallbackMaterial = availableMaterials[0] ?? "Semijoia";
-        const finalCategory = category
-          ? category
-          : matchOption(analysis.category, availableCategories, fallbackCategory);
-        const finalMaterial = material
-          ? material
-          : matchOption(analysis.material, availableMaterials, fallbackMaterial);
-        const finalListingType: ProductListingType =
-          listingType === "rent"
-            ? "rent"
-            : resolveListingType("sale", finalCategory, finalMaterial);
-
-        const product: Product = {
-          id: crypto.randomUUID(),
-          name: analysis.name.trim() || current.originalName.replace(/\.[^.]+$/, ""),
-          sku: "",
-          category: finalCategory,
-          material: finalMaterial,
-          listing_type: finalListingType,
-          price: parsedPrice,
-          sale_price: 0,
-          is_on_sale: false,
-          sale_label: "",
-          image_url: uploaded.url,
-          description: analysis.description.trim(),
-          active: autoPublish,
-          featured: false,
-          in_stock: true,
-          characteristics: analysis.characteristics.map((c) => ({
-            attribute: c.label,
-            value: c.value,
-          })),
-        };
-
-        await onSaveProduct(product);
-        publishedNow += 1;
-        updateItem(current.id, { status: "done", createdName: product.name });
-      } catch (err) {
-        if (uploadedImageUrl) {
-          void deleteStoreImage(uploadedImageUrl);
-        }
-        failedNow += 1;
-        updateItem(current.id, {
-          status: "failed",
-          error: err instanceof Error ? err.message : "Erro ao processar esta foto.",
-        });
-      }
-
-      if (index < queueSnapshot.length - 1 && sessionId === runSessionRef.current) {
-        await sleep(STEP_DELAY_MS);
-      }
-    }
-
-    if (sessionId !== runSessionRef.current) return;
+    if (sessionId !== runSessionRef.current || result.cancelled) return;
+    setCountdownMessage(null);
     setRunning(false);
+
+    const publishedNow = result.succeededIds.length;
+    const failedNow = result.failedIds.length;
 
     if (failedNow === 0 && publishedNow > 0) {
       toast.success(
@@ -295,16 +340,21 @@ export function BatchImportDialog({
           : `${publishedNow} produtos importados com sucesso!`,
       );
     } else if (publishedNow > 0 && failedNow > 0) {
-      toast.warning(`${publishedNow} importado(s) e ${failedNow} com falha. Você pode reprocessar.`);
+      toast.warning(
+        `${publishedNow} importado(s) e ${failedNow} com falha após 3 tentativas. Você pode reprocessar manualmente.`,
+      );
     } else if (failedNow > 0) {
-      toast.error("Não foi possível importar os itens selecionados. Tente reprocessar.");
+      toast.error(
+        "Não foi possível importar os itens selecionados após 3 tentativas. Tente reprocessar manualmente.",
+      );
     }
   };
 
   const doneCount = items.filter((item) => item.status === "done").length;
   const failedItems = items.filter((item) => item.status === "failed");
-  const processedCount = doneCount + failedItems.length;
-  const progressPercent = items.length > 0 ? Math.round((processedCount / items.length) * 100) : 0;
+  const completedForProgress = running ? doneCount : doneCount + failedItems.length;
+  const progressPercent =
+    items.length > 0 ? Math.round((completedForProgress / items.length) * 100) : 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -497,7 +547,7 @@ export function BatchImportDialog({
                       type="button"
                       disabled={converting}
                       onClick={() => {
-                        revokeAllPreviews(items);
+                        cleanupItemsResources(items);
                         setItems([]);
                       }}
                       className="text-destructive hover:underline cursor-pointer disabled:opacity-50"
@@ -560,15 +610,15 @@ export function BatchImportDialog({
           {step === 3 && (
             <>
               <div className="rounded-lg border bg-secondary/50 p-4 space-y-2.5">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between text-xs gap-2">
                   <span className="font-medium text-foreground">
                     {running
-                      ? `Processando 1 foto por vez (${processedCount}/${items.length})...`
+                      ? `Processando lote (${doneCount}/${items.length} publicada${doneCount === 1 ? "" : "s"})...`
                       : `Processamento concluído (${doneCount} publicado${doneCount === 1 ? "" : "s"}${
                           failedItems.length > 0 ? ` · ${failedItems.length} com falha` : ""
                         })`}
                   </span>
-                  <span className="font-semibold text-primary">{progressPercent}%</span>
+                  <span className="font-semibold text-primary shrink-0">{progressPercent}%</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-border overflow-hidden">
                   <div
@@ -576,6 +626,16 @@ export function BatchImportDialog({
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
+                {countdownMessage && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center gap-2 rounded-md border border-gold/50 bg-background/90 px-3 py-2 text-xs font-medium text-primary"
+                  >
+                    <Clock size={14} className="text-gold shrink-0 animate-pulse" />
+                    <span>{countdownMessage}</span>
+                  </div>
+                )}
               </div>
 
               <div className="divide-y border rounded-lg overflow-hidden bg-background">
@@ -590,7 +650,7 @@ export function BatchImportDialog({
                       <p className="text-xs font-medium text-foreground truncate">
                         {item.createdName || item.originalName}
                       </p>
-                      {item.error ? (
+                      {item.error && item.status === "failed" ? (
                         <p className="text-[11px] text-destructive mt-0.5 leading-4">
                           {item.error}
                         </p>
@@ -606,7 +666,9 @@ export function BatchImportDialog({
                           ? "bg-primary text-primary-foreground"
                           : item.status === "failed"
                             ? "bg-destructive/10 text-destructive border border-destructive/30"
-                            : item.status === "analyzing" || item.status === "uploading"
+                            : item.status === "analyzing" ||
+                                item.status === "uploading" ||
+                                item.status === "retrying"
                               ? "bg-secondary text-primary border border-gold/50"
                               : "bg-muted text-muted-foreground"
                       }`}
@@ -614,10 +676,13 @@ export function BatchImportDialog({
                       {(item.status === "analyzing" || item.status === "uploading") && (
                         <Loader2 size={12} className="animate-spin" />
                       )}
+                      {item.status === "retrying" && <Clock size={12} className="text-gold" />}
                       {item.status === "done" && <CheckCircle2 size={12} />}
                       {item.status === "failed" && <AlertCircle size={12} />}
                       {item.status === "queued" && "Na fila"}
-                      {item.status === "analyzing" && "Analisando..."}
+                      {item.status === "retrying" && "Aguardando repescagem..."}
+                      {item.status === "analyzing" &&
+                        (item.attempt > 1 ? `Analisando (${item.attempt}/3)...` : "Analisando...")}
                       {item.status === "uploading" && "Enviando..."}
                       {item.status === "done" && (autoPublish ? "Publicado ✓" : "Salvo (oculto) ✓")}
                       {item.status === "failed" && "Falhou"}
@@ -644,7 +709,14 @@ export function BatchImportDialog({
                   disabled={running}
                   onClick={() => handleOpenChange(false)}
                 >
-                  {running ? "Aguarde a conclusão..." : "Concluir"}
+                  {running ? (
+                    <>
+                      <Loader2 size={15} className="animate-spin" />
+                      Processando lote...
+                    </>
+                  ) : (
+                    "Concluir"
+                  )}
                 </Button>
               </div>
             </>

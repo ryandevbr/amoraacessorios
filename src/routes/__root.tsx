@@ -83,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Loja física no Olaria, Timóteo - MG, e atendimento pelo WhatsApp (31) 98881-3158.",
+          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Loja física na Rua 68, Nº 22 — Olaria, Timóteo - MG, e atendimento pelo WhatsApp (31) 98881-3158.",
       },
       { name: "color-scheme", content: "light only" },
       // Remover no lançamento no domínio oficial .com.br.
@@ -95,10 +95,27 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Realce sua beleza em cada detalhe: semijoias, bolsas para venda e aluguel e maquiagens a partir de R$ 10 no Olaria, Timóteo - MG.",
+          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Loja física na Rua 68, Nº 22 — Olaria, Timóteo - MG.",
       },
+      { property: "og:image", content: "/og-image.png" },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:alt", content: "Amora Acessórios — Semijoias, Bolsas & Maquiagens" },
       { property: "og:type", content: "website" },
+      { property: "og:locale", content: "pt_BR" },
+      { property: "og:site_name", content: "Amora Acessórios" },
       { name: "twitter:card", content: "summary_large_image" },
+      {
+        name: "twitter:title",
+        content: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Rua 68, Nº 22 — Olaria, Timóteo - MG.",
+      },
+      { name: "twitter:image", content: "/og-image.png" },
     ],
     links: [
       {

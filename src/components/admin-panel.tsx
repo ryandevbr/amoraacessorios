@@ -19,9 +19,11 @@ import {
   Save,
 } from "lucide-react";
 import { toast } from "sonner";
+import { BatchImportDialog } from "@/components/batch-import-dialog";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { normalizeImageFile } from "@/lib/normalize-image";
 import { useStore } from "@/services/storeService";
 import {
   mergeOptionValues,
@@ -106,6 +108,7 @@ export function AdminPanel() {
   const [inlineOptionValue, setInlineOptionValue] = useState("");
   const [savingOption, setSavingOption] = useState(false);
   const [manageOptionsOpen, setManageOptionsOpen] = useState(false);
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
   const [manageCategoryInput, setManageCategoryInput] = useState("");
   const [manageMaterialInput, setManageMaterialInput] = useState("");
   const [removingOptionId, setRemovingOptionId] = useState<string | null>(null);
@@ -309,10 +312,11 @@ export function AdminPanel() {
     const sessionId = productModalSessionRef.current;
     setUploading(true);
     try {
+      const normalizedFile = await normalizeImageFile(file);
       const result =
         kind === "banner"
-          ? await uploadOriginalBannerImage(file)
-          : await uploadStoreImage(file, kind === "product" ? "products" : "profiles");
+          ? await uploadOriginalBannerImage(normalizedFile)
+          : await uploadStoreImage(normalizedFile, kind === "product" ? "products" : "profiles");
       if (kind === "banner") {
         const sizeLabel =
           result.original >= 1024 * 1024
@@ -327,11 +331,11 @@ export function AdminPanel() {
         );
       }
       if (kind === "product") {
-        lastProductFileRef.current = file;
+        lastProductFileRef.current = normalizedFile;
         pendingUploadsRef.current.push(result.url);
         setEdit((prev) => (prev ? { ...prev, image_url: result.url } : prev));
         if (autoFillOnUpload && sessionId === productModalSessionRef.current) {
-          void runAiAnalysis({ mode: "auto", file, imageUrl: result.url });
+          void runAiAnalysis({ mode: "auto", file: normalizedFile, imageUrl: result.url });
         }
       }
       if (kind === "profile") {
@@ -555,8 +559,8 @@ export function AdminPanel() {
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-              <div className="relative">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 min-w-0">
                 <Search
                   className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted-foreground"
                   size={18}
@@ -568,10 +572,21 @@ export function AdminPanel() {
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </div>
-              <Button className="h-12" onClick={newProduct}>
-                <Plus />
-                <span className="hidden sm:inline">Novo produto</span>
-              </Button>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 flex-1 sm:flex-none border-gold/60 text-primary hover:bg-secondary"
+                  onClick={() => setBatchImportOpen(true)}
+                >
+                  <Sparkles size={16} className="text-gold" />
+                  <span>Importar em Lote (IA)</span>
+                </Button>
+                <Button className="h-12 shrink-0" onClick={newProduct}>
+                  <Plus />
+                  <span className="hidden sm:inline">Novo produto</span>
+                </Button>
+              </div>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
               <select
@@ -1261,7 +1276,7 @@ export function AdminPanel() {
                   Foto principal
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.heic,.heif"
                     disabled={uploading}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -1784,7 +1799,7 @@ export function AdminPanel() {
                   Imagem do banner (16:9)
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.heic,.heif"
                     disabled={uploading}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -2040,7 +2055,7 @@ export function AdminPanel() {
             Foto
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               disabled={uploading}
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -2083,6 +2098,13 @@ export function AdminPanel() {
           </Button>
         </DialogContent>
       </Dialog>
+      <BatchImportDialog
+        open={batchImportOpen}
+        onOpenChange={setBatchImportOpen}
+        availableCategories={filterCategories}
+        availableMaterials={filterMaterials}
+        onSaveProduct={saveProduct}
+      />
     </main>
   );
 }

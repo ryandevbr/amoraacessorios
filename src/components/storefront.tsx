@@ -397,8 +397,12 @@ export function Storefront() {
                 </Button>
               </div>
               <a
-                href="#onde-estamos"
-                className="inline-flex gap-2 items-center text-[11px] text-muted-foreground hover:text-primary transition-colors mt-5"
+                href="#loja-fisica"
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById("loja-fisica")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="inline-flex gap-2 items-center text-[11px] text-muted-foreground hover:text-primary transition-colors mt-5 scroll-smooth"
               >
                 <MapPin size={14} className="text-gold shrink-0" />
                 {storeContent.address} <ArrowRight size={12} />
@@ -649,34 +653,27 @@ export function Storefront() {
               id="onde-estamos"
               className="grid md:grid-cols-3 gap-8 border-t mt-12 pt-10 text-xs text-muted-foreground scroll-mt-28"
             >
-              <div className="rounded-lg bg-background/80 border border-gold-light/60 p-6">
-                <MapPin size={21} className="text-gold mb-3" />
-                <p className="eyebrow text-gold mb-1.5">Onde estamos</p>
-                <h3 className="text-xl text-foreground">Loja física &amp; retirada no Olaria</h3>
-                <p className="text-foreground font-medium mt-3">{storeContent.address}</p>
-                <p className="leading-6 mt-2">
-                  Retire seu pedido pessoalmente na loja no bairro Olaria ou solicite entrega em
-                  Timóteo e região.
-                </p>
-                <div className="flex flex-wrap gap-4 mt-4">
-                  <a
-                    href={storeContent.mapsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline"
-                  >
-                    Ver no mapa <ArrowRight size={12} />
-                  </a>
-                  <a
-                    href={storeContent.whatsapp}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline"
-                  >
-                    {storeContent.whatsappDisplay}
-                  </a>
+              <a
+                id="loja-fisica"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(storeContent.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="scroll-mt-28 sm:scroll-mt-32 flex flex-col justify-between rounded-lg bg-background/80 border border-gold-light/60 p-6 transition-all hover:border-[#B88B58]/60 hover:shadow-md cursor-pointer"
+              >
+                <div>
+                  <MapPin size={21} className="text-gold mb-3" />
+                  <p className="eyebrow text-gold mb-1.5">Onde estamos</p>
+                  <h3 className="text-xl text-foreground">Loja física &amp; retirada no Olaria</h3>
+                  <p className="text-foreground font-medium mt-3">{storeContent.address}</p>
+                  <p className="leading-6 mt-2">
+                    Retire seu pedido pessoalmente na loja no bairro Olaria ou solicite entrega em
+                    Timóteo e região.
+                  </p>
                 </div>
-              </div>
+                <p className="mt-5 pt-3 border-t border-border/60 text-primary font-medium text-xs">
+                  Ver localização no Google Maps ↗
+                </p>
+              </a>
               <div className="rounded-lg bg-background/80 border border-border p-6">
                 <ShoppingBag size={21} className="text-gold mb-3" />
                 <p className="eyebrow text-gold mb-1.5">Eventos &amp; praticidade</p>

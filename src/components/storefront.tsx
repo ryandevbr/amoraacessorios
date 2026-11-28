@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   Search,
   ShoppingBag,
   Sparkles,
-  MapPin,
+  Truck,
   ShieldCheck,
   MessageCircle,
   Instagram,
@@ -15,32 +15,40 @@ import {
   Trash2,
   Share2,
   Check,
+  CreditCard,
   Heart,
-  X,
   Gift,
-  Calendar,
+  MapPin,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { BrandLogo } from "@/components/brand-logo";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import {
+  ACTIVE_STORE_SLUG,
+  NICHE_CATALOG_DEFAULTS,
+  STORE_CONFIG,
+  getDefaultBannerAlt,
+  getMaterialLabel,
+  getPhysicalStoreMapsUrl,
+  getWhatsappUrl,
+  hasActivePhysicalStore,
+  isFashionNiche,
+  isFootwearNiche,
+} from "@/config/store.config";
 import { useStore } from "@/services/storeService";
 import {
   mergeOptionValues,
   optionLookupKey,
   useCatalogOptions,
 } from "@/services/catalogOptionsService";
-import { calculateCoupon, normalizeCode, type CartItem } from "@/services/couponService";
 import {
-  buildRentWhatsAppMessage,
-  getTodayLocalIsoDate,
-  isRentProduct,
-  money,
-  priceOf,
-  shouldShowPromotion,
-  type Product,
-} from "@/data/catalog";
-import { storeContent } from "@/data/storeContent";
+  calculateCoupon,
+  getCartItemKey,
+  normalizeCode,
+  type CartItem,
+} from "@/services/couponService";
+import { money, priceOf, type Product } from "@/data/catalog";
 
 function matchesFilter(product: Product, selected: string): boolean {
   if (selected === "Todos") return true;
@@ -49,38 +57,28 @@ function matchesFilter(product: Product, selected: string): boolean {
   const productCategory = optionLookupKey(product.category);
   const productMaterial = optionLookupKey(product.material);
   if (target === "semijoias" && productMaterial === "semijoia") return true;
-  if (target === "bolsas" && productMaterial === "bolsa") return true;
-  if (target === "maquiagens" && productMaterial === "maquiagem") return true;
-  if (target === "aluguel de bolsas" && (productMaterial === "aluguel" || isRentProduct(product)))
-    return true;
-  if (
-    target === "aluguel" &&
-    (productCategory === "aluguel de bolsas" || isRentProduct(product))
-  )
-    return true;
   return productCategory === target || productMaterial === target;
 }
 
 function getMaterialBadgeClass(material: string): string {
   const key = optionLookupKey(material);
-  if (key.includes("aluguel")) {
-    return "bg-primary/95 text-primary-foreground border border-gold/45 backdrop-blur-sm";
-  }
   if (key.includes("prata")) {
-    return "bg-background/95 text-foreground border border-border/90 backdrop-blur-sm";
+    return "bg-background/95 text-foreground border border-border/80 backdrop-blur-sm";
   }
   if (key.includes("semijoia") || key.includes("ouro") || key.includes("dourad")) {
-    return "bg-secondary/95 text-foreground border border-gold/50 backdrop-blur-sm";
-  }
-  if (key.includes("bolsa")) {
-    return "bg-secondary/95 text-primary border border-primary/20 backdrop-blur-sm";
-  }
-  if (key.includes("maquiag") || key.includes("make")) {
-    return "bg-background/95 text-primary border border-gold/55 backdrop-blur-sm";
+    return "bg-secondary/95 text-foreground border border-primary/25 backdrop-blur-sm";
   }
   return "bg-background/95 text-foreground/90 border border-border/80 backdrop-blur-sm";
 }
 
+function getDefaultSelectedSize(sizes: string[]): string {
+  if (sizes.length === 1 && sizes[0] === "Tamanho Único") {
+    return "Tamanho Único";
+  }
+  return "";
+}
+
+const BAG_STORAGE_KEY = `store-bag-v1-${ACTIVE_STORE_SLUG}`;
 const PRODUCTS_PER_PAGE = 16;
 
 export function Storefront() {
@@ -91,6 +89,7 @@ export function Storefront() {
   const [sort, setSort] = useState("featured");
   const [visibleCount, setVisibleCount] = useState(PRODUCTS_PER_PAGE);
   const [product, setProduct] = useState<Product | null>(null);
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
   const [bag, setBag] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [ready, setReady] = useState(false);
@@ -98,91 +97,124 @@ export function Storefront() {
   const [applied, setApplied] = useState("");
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
-  const [rentDate, setRentDate] = useState("");
-  const [rentName, setRentName] = useState("");
-  const rentDateInputRef = useRef<HTMLInputElement>(null);
   const [slide, setSlide] = useState(0);
-  const todayIso = getTodayLocalIsoDate();
+
+  const isModa = isFashionNiche();
+  const isCalcados = isFootwearNiche();
+  const materialLabel = getMaterialLabel();
+  const physicalStore = STORE_CONFIG.physicalStore;
+  const hasPhysicalStore = hasActivePhysicalStore();
+  const mapsUrl = physicalStore ? getPhysicalStoreMapsUrl(physicalStore) : "";
+  const whatsappHref = getWhatsappUrl();
+  const defaultBannerAlt = getDefaultBannerAlt();
+
   useEffect(() => {
     try {
-      setCart(JSON.parse(localStorage.getItem("amora-bag") ?? "[]"));
-    } catch {}
+      const parsed = JSON.parse(localStorage.getItem(BAG_STORAGE_KEY) ?? "[]") as CartItem[];
+      if (Array.isArray(parsed)) {
+        setCart(
+          parsed
+            .filter((item) => item && item.product && typeof item.quantity === "number")
+            .map((item) => ({
+              ...item,
+              product: {
+                ...item.product,
+                sizes: Array.isArray(item.product.sizes) ? item.product.sizes : [],
+              },
+            })),
+        );
+      }
+    } catch {
+      // ignore corrupted storage
+    }
     setReady(true);
   }, []);
+
   useEffect(() => {
     if (!ready) return;
     const id = new URL(window.location.href).searchParams.get("produto");
     if (id) {
-      const p = data.products.find((p) => p.id === id && p.active);
+      const p = data.products.find((item) => item.id === id && item.active);
       if (p) {
         setProduct(p);
         document.getElementById("vitrine")?.scrollIntoView();
       }
     }
   }, [ready, data.products]);
+
   useEffect(() => {
-    if (ready) localStorage.setItem("amora-bag", JSON.stringify(cart));
+    if (ready) localStorage.setItem(BAG_STORAGE_KEY, JSON.stringify(cart));
   }, [cart, ready]);
+
   useEffect(() => {
     setVisibleCount(PRODUCTS_PER_PAGE);
   }, [filter, query, sort]);
+
   const banners = data.banners.filter((b) => b.active);
   const currentSlide = banners.length > 0 ? slide % banners.length : 0;
+
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || banners.length < 2) return;
     const timer = setInterval(() => setSlide((s) => (s + 1) % banners.length), 3000);
     return () => clearInterval(timer);
   }, [banners.length]);
+
+  const getActiveSize = (p: Product): string => {
+    const chosen = selectedSizes[p.id];
+    if (chosen && p.sizes.includes(chosen)) return chosen;
+    return getDefaultSelectedSize(p.sizes);
+  };
+
   function open(p: Product | null) {
     setProduct(p);
-    setRentDate("");
     const url = new URL(window.location.href);
     if (p) url.searchParams.set("produto", p.id);
     else url.searchParams.delete("produto");
     window.history.replaceState({}, "", url);
   }
-  function add(p: Product) {
-    if (!p.in_stock || isRentProduct(p)) return;
-    setCart((c) => {
-      const old = c.find((i) => i.product.id === p.id);
-      return old
-        ? c.map((i) => (i.product.id === p.id ? { ...i, quantity: i.quantity + 1 } : i))
-        : [...c, { product: p, quantity: 1 }];
-    });
-    toast.success("Peça adicionada à sacola");
-  }
-  function handleConsultRent(p: Product) {
-    if (!rentDate) {
-      toast.error("Selecione a data do evento para consultar a disponibilidade.");
-      rentDateInputRef.current?.focus();
+
+  function add(p: Product, explicitSize?: string) {
+    if (!p.in_stock) return;
+    const chosenSize = (explicitSize ?? getActiveSize(p)).trim();
+    if (p.sizes.length > 0 && !chosenSize) {
+      toast.error("Selecione um tamanho antes de adicionar à sacola.");
       return;
     }
-    const productUrl = `${window.location.origin}/?produto=${p.id}`;
-    const message = buildRentWhatsAppMessage({
-      product: p,
-      eventDateIso: rentDate,
-      customerName: rentName,
-      productUrl,
+
+    const itemKey = getCartItemKey(p.id, chosenSize || undefined);
+    setCart((c) => {
+      const existing = c.find((i) => getCartItemKey(i.product.id, i.selectedSize) === itemKey);
+      if (existing) {
+        return c.map((i) =>
+          getCartItemKey(i.product.id, i.selectedSize) === itemKey
+            ? { ...i, quantity: i.quantity + 1 }
+            : i,
+        );
+      }
+      const nextItem: CartItem = chosenSize
+        ? { product: p, quantity: 1, selectedSize: chosenSize }
+        : { product: p, quantity: 1 };
+      return [...c, nextItem];
     });
-    window.open(
-      `${storeContent.whatsapp}?text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer",
+    toast.success(
+      chosenSize ? `Peça (${chosenSize}) adicionada à sacola` : "Peça adicionada à sacola",
     );
   }
+
   const activeProducts = data.products.filter((p) => p.active);
+  const nicheDefaults = NICHE_CATALOG_DEFAULTS[STORE_CONFIG.niche];
   const dynamicMaterials = mergeOptionValues(
-    materialNames,
+    materialNames.length > 0 ? materialNames : [...nicheDefaults.materials],
     activeProducts.map((p) => p.material),
   );
   const dynamicCategories = mergeOptionValues(
-    categoryNames,
+    categoryNames.length > 0 ? categoryNames : [...nicheDefaults.categories],
     activeProducts.map((p) => p.category),
   );
   const filters = [
     "Todos",
     "Promoções",
-    ...mergeOptionValues([...dynamicCategories, ...dynamicMaterials]),
+    ...mergeOptionValues([...dynamicMaterials, ...dynamicCategories]),
   ];
   const filteredProducts = activeProducts
     .filter(
@@ -200,13 +232,15 @@ export function Storefront() {
   const visibleProducts = filteredProducts.slice(0, visibleCount);
   const remainingCount = Math.max(0, filteredProducts.length - visibleCount);
   const nextBatchCount = Math.min(PRODUCTS_PER_PAGE, remainingCount);
+  const promotion = data.promotion;
+  const showPromotion = promotion.promo_active && promotion.promo_title.trim() !== "";
   const coupon = data.coupons.find((c) => c.code === applied);
   const totals = calculateCoupon(cart, coupon);
   const subtotal = cart.reduce((s, i) => s + priceOf(i.product) * i.quantity, 0);
   const discount = applied && !totals.error ? totals.discount : 0;
   const total = subtotal - discount;
   const count = cart.reduce((s, i) => s + i.quantity, 0);
-  const showPromotion = shouldShowPromotion(data.announcement);
+
   const scroll = (f: string) => {
     const targetKey = optionLookupKey(f);
     const matched =
@@ -217,25 +251,29 @@ export function Storefront() {
     setFilter(matched ?? f);
     document.getElementById("vitrine")?.scrollIntoView({ behavior: "smooth" });
   };
+
   async function share(p: Product) {
     const url = `${window.location.origin}/?produto=${p.id}`;
     try {
-      if (navigator.share) await navigator.share({ title: p.name, text: storeContent.name, url });
+      if (navigator.share) await navigator.share({ title: p.name, text: STORE_CONFIG.name, url });
       else {
         await navigator.clipboard.writeText(url);
         toast.success("Link copiado!");
       }
-    } catch {}
+    } catch {
+      // user cancelled share dialog
+    }
   }
+
   const checkout = () => {
     const lines = [
-      "Olá, Amora Acessórios! ✨",
+      `Olá, ${STORE_CONFIG.name}! ✨`,
       "Gostaria de finalizar meu pedido feito pelo site:",
       "",
       cart
         .map(
           (i) =>
-            `• *${i.product.name}* (${i.product.material})${i.product.is_on_sale ? " (Promoção)" : ""} — Qtd: ${i.quantity} — ${money(priceOf(i.product) * i.quantity)}`,
+            `• *${i.product.name}*${i.selectedSize ? ` — Tam: ${i.selectedSize}` : ""} (${i.product.material})${i.product.is_on_sale ? " (Promoção)" : ""} — Qtd: ${i.quantity} — ${money(priceOf(i.product) * i.quantity)}`,
         )
         .join("\n\n"),
       "",
@@ -249,33 +287,95 @@ export function Storefront() {
       `Total estimado: ${money(total)}`,
       "",
       ...(name ? [`Nome: ${name}`] : []),
-      ...(city ? [`Bairro/Cidade ou Retirada: ${city}`] : []),
+      ...(city ? [`CEP/Cidade: ${city}`] : []),
       "",
-      "Aguardo para combinarmos a retirada no Olaria, entrega ou forma de pagamento!",
+      hasPhysicalStore
+        ? "Aguardo para combinarmos o frete ou retirada presencial e a forma de pagamento!"
+        : "Aguardo para combinarmos o frete e a forma de pagamento!",
     ];
-    window.open(
-      `${storeContent.whatsapp}?text=${encodeURIComponent(lines.join("\n"))}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    window.open(getWhatsappUrl(lines.join("\n")), "_blank", "noopener,noreferrer");
   };
+
+  const careItems = isModa
+    ? [
+        [
+          "Como cuidar das suas peças?",
+          "Prefira lavagem delicada à mão ou ciclo suave com sabão neutro e seque à sombra para preservar o caimento e a cor.",
+        ],
+        [
+          "Dúvidas sobre tamanhos e caimento?",
+          "Consulte a grade disponível em cada peça ou chame nossa equipe no WhatsApp para orientação personalizada.",
+        ],
+        [
+          "Trocas e devoluções",
+          "Consulte as condições e prazos diretamente em nosso atendimento pelo WhatsApp.",
+        ],
+      ]
+    : isCalcados
+      ? [
+          [
+            "Como cuidar dos seus calçados?",
+            "Limpe com pano macio levemente umedecido, evite exposição prolongada ao sol e guarde em local arejado.",
+          ],
+          [
+            "Dúvidas sobre numeração e calce?",
+            "Consulte as numerações disponíveis no produto ou fale conosco no WhatsApp para ajuda na escolha ideal.",
+          ],
+          [
+            "Trocas e devoluções",
+            "Consulte as condições e prazos diretamente em nosso atendimento pelo WhatsApp.",
+          ],
+        ]
+      : [
+          [
+            "Como cuidar da Prata 925?",
+            "Limpe com flanela macia e guarde em local seco, separada de outras peças.",
+          ],
+          [
+            "Como cuidar das Semijoias?",
+            "Evite perfumes, produtos químicos, banho e piscina. Guarde cada peça individualmente.",
+          ],
+          [
+            "Sobre a garantia",
+            "Consulte as condições e os prazos de cada peça em nosso atendimento pelo WhatsApp.",
+          ],
+        ];
+
+  const trustHighlights: Array<[typeof Truck, string]> = [
+    [Truck, "Para todo o Brasil"],
+    [
+      Sparkles,
+      isModa
+        ? "Moda Feminina selecionada"
+        : isCalcados
+          ? "Calçados selecionados"
+          : "Prata 925 & Semijoias",
+    ],
+    hasPhysicalStore && physicalStore
+      ? [MapPin, physicalStore.title]
+      : [Heart, "Curadoria feita com carinho"],
+    [ShieldCheck, "Atendimento personalizado"],
+  ];
+
+  const aboutTitle =
+    STORE_CONFIG.aboutTitle ??
+    (isModa
+      ? "Mais que moda, um pouco de você."
+      : isCalcados
+        ? "Conforto e estilo a cada passo."
+        : "Mais que acessórios, um pouco de você.");
+  const aboutText =
+    STORE_CONFIG.aboutText ??
+    "Nossa curadoria reúne estilo, qualidade e atendimento personalizado com envio para todo o Brasil.";
+
   return (
     <>
       {data.announcement.active && data.announcement.text.trim() && (
         <div className="bg-primary text-primary-foreground text-center px-4 py-2.5 text-[10px] sm:text-xs">
-          <a
-            href={
-              !showPromotion &&
-              (data.announcement.link === "#promocoes" || data.announcement.link === "#promocao")
-                ? "#vitrine"
-                : data.announcement.link || "#vitrine"
-            }
-            className="inline-flex gap-2 items-center"
-          >
-            {!data.announcement.text.trim().startsWith("✨") && (
-              <Sparkles size={12} className="text-gold-light shrink-0" />
-            )}
-            <span>{data.announcement.text}</span>
+          <a href={data.announcement.link || "#vitrine"} className="inline-flex gap-2 items-center">
+            <Sparkles size={12} />
+            {data.announcement.text}
+            <span className="hidden sm:inline"> · Enviamos para todo o Brasil</span>
           </a>
         </div>
       )}
@@ -283,27 +383,20 @@ export function Storefront() {
         <div className="shell flex items-center justify-between gap-3 md:grid md:grid-cols-[1fr_auto_1fr] h-17 sm:h-18.5 md:h-20">
           <a
             href="#inicio"
-            aria-label="Amora Acessórios — início"
+            aria-label={`${STORE_CONFIG.name} — início`}
             className="inline-flex items-center shrink-0"
           >
-            <BrandLogo size="md" />
+            <img
+              src="/logo.png"
+              alt={STORE_CONFIG.name}
+              className="h-12 sm:h-14 md:h-16 w-auto max-w-none shrink-0 object-contain"
+            />
           </a>
-          <nav className="hidden md:flex justify-center gap-7 text-xs text-muted-foreground">
-            <a href="#inicio" className="transition-colors hover:text-primary">
-              Início
-            </a>
-            <a href="#vitrine" className="transition-colors hover:text-primary">
-              Vitrine
-            </a>
-            <a href="#como-comprar" className="transition-colors hover:text-primary">
-              Como comprar
-            </a>
-            <a href="#onde-estamos" className="transition-colors hover:text-primary">
-              Onde estamos
-            </a>
-            <a href="#sobre" className="transition-colors hover:text-primary">
-              Sobre
-            </a>
+          <nav className="hidden md:flex justify-center gap-8 text-xs text-muted-foreground">
+            <a href="#inicio">Início</a>
+            <a href="#vitrine">Vitrine</a>
+            <a href="#envios-entregas">Envios e entregas</a>
+            <a href="#sobre">Sobre</a>
           </nav>
           <div className="flex gap-2 sm:gap-4 justify-end items-center shrink-0">
             <Button
@@ -325,7 +418,7 @@ export function Storefront() {
             >
               <ShoppingBag />
               <span className="hidden sm:inline text-xs">Sacola</span>
-              <span className="rounded-full bg-secondary border border-gold-light/70 text-primary font-medium text-[10px] h-5 w-5 grid place-items-center">
+              <span className="rounded-full bg-secondary text-foreground text-[10px] h-5 w-5 grid place-items-center">
                 {count}
               </span>
             </Button>
@@ -339,20 +432,20 @@ export function Storefront() {
               <img
                 key={b.id}
                 src={b.image_url}
-                alt={b.alt || "Banner Amora Acessórios"}
-                onClick={() => b.filter && scroll(b.filter)}
+                alt={b.alt || defaultBannerAlt}
                 className={`hero-photo w-full h-full object-cover object-center ${
                   i === currentSlide ? "opacity-100" : "opacity-0 pointer-events-none"
                 }`}
                 loading={i === 0 ? "eager" : "lazy"}
                 fetchPriority={i === 0 ? "high" : "auto"}
                 decoding="async"
+                onClick={() => b.filter && scroll(b.filter)}
               />
             ))}
             <div className="hero-scrim pointer-events-none" />
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-linear-to-t from-muted to-transparent md:hidden"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-linear-to-t from-surface to-transparent md:hidden"
             />
             {banners.length > 1 && (
               <div className="absolute bottom-3 right-4 md:bottom-6 md:right-8 z-10 flex gap-2">
@@ -368,100 +461,106 @@ export function Storefront() {
               </div>
             )}
           </div>
-          <div className="shell hero-content bg-muted md:bg-transparent pointer-events-none">
-            <div className="max-w-135 pointer-events-auto">
+          <div className="shell hero-content bg-surface md:bg-transparent pointer-events-none">
+            <div className="max-w-127.5 pointer-events-auto">
               <p className="eyebrow text-muted-foreground flex gap-2 items-center mb-4 md:mb-5">
-                <Sparkles size={15} className="text-gold shrink-0" /> {storeContent.subtitle}
+                <Sparkles size={15} className="text-primary" /> {STORE_CONFIG.hero.badge}
               </p>
-              <h1 className="text-foreground">
-                Realce sua beleza
-                <br />
-                em cada detalhe:
-                <br />
-                <em className="text-primary">semijoias, bolsas &amp; makes</em>
-              </h1>
-              <p className="text-muted-foreground text-sm leading-7 mt-4 md:mt-6 max-w-105">
-                Semijoias elegantes, venda e aluguel de bolsas para ocasiões especiais e maquiagens
-                a partir de R$ 10. Atendimento acolhedor no bairro Olaria, em Timóteo, e pelo
-                WhatsApp.
+              <h1 className="text-foreground">{STORE_CONFIG.hero.title}</h1>
+              <p className="text-muted-foreground text-sm leading-7 mt-4 md:mt-6 max-w-98.75">
+                {STORE_CONFIG.hero.subtitle}
               </p>
               <div className="flex flex-wrap gap-3 mt-6 md:mt-7">
                 <Button size="lg" onClick={() => scroll("Todos")}>
                   Ver vitrine <ArrowRight />
                 </Button>
                 <Button size="lg" variant="editorial" asChild>
-                  <a href={storeContent.whatsapp} target="_blank" rel="noreferrer">
+                  <a href={whatsappHref} target="_blank" rel="noreferrer">
                     <MessageCircle />
                     Chamar no WhatsApp
                   </a>
                 </Button>
               </div>
-              <a
-                href="#loja-fisica"
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById("loja-fisica")?.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="inline-flex gap-2 items-center text-[11px] text-muted-foreground hover:text-primary transition-colors mt-5 scroll-smooth"
-              >
-                <MapPin size={14} className="text-gold shrink-0" />
-                {storeContent.address} <ArrowRight size={12} />
-              </a>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-5">
+                <a
+                  href="#envios-entregas"
+                  className="inline-flex gap-2 items-center text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Truck size={14} />
+                  Envios e entregas <ArrowRight size={12} />
+                </a>
+                {hasPhysicalStore && physicalStore && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex gap-1.5 items-center text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <MapPin size={14} className="text-primary shrink-0" />
+                    <span>
+                      {physicalStore.address} · {physicalStore.cityState}
+                    </span>
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </section>
         <div className="bg-background border-b">
           <div className="shell grid grid-cols-2 md:grid-cols-4 py-6 gap-5 text-[11px] text-muted-foreground">
-            {[
-              [Sparkles, "Semijoias & Prata 925"],
-              [ShoppingBag, "Venda e Aluguel de Bolsas"],
-              [Heart, "Maquiagens a partir de R$ 10"],
-              [MapPin, "Loja física no Olaria · Timóteo"],
-            ].map(([Icon, text], i) => {
-              const C = Icon as typeof Sparkles;
+            {trustHighlights.map(([Icon, text], i) => {
+              const C = Icon;
               return (
                 <div key={i} className="flex justify-center items-center gap-2">
-                  <C size={17} className="text-gold shrink-0" />
-                  <span>{text as string}</span>
+                  <C size={17} className="text-primary shrink-0" />
+                  <span>{text}</span>
                 </div>
               );
             })}
           </div>
         </div>
         {showPromotion && (
-          <section id="promocoes" className="shell pt-12 md:pt-16 scroll-mt-24">
-            <div className="relative overflow-hidden rounded-2xl bg-linear-to-br from-[#F3ECE2] to-[#FCF9F5] border border-[#B88B58]/30 shadow-xs px-6 py-8 sm:px-10 sm:py-10 md:px-14 md:py-12">
-              <div className="max-w-2xl mx-auto text-center">
-                {data.announcement.promo_badge.trim() && (
-                  <p className="inline-flex items-center gap-2 rounded-full border border-[#B88B58]/35 bg-background/85 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">
-                    <Sparkles size={13} className="text-gold shrink-0" />
-                    <span>{data.announcement.promo_badge}</span>
-                  </p>
-                )}
-                <h2 className="font-display text-3xl sm:text-4xl md:text-[42px] leading-[1.15] text-primary mt-4">
-                  {data.announcement.promo_title}
-                </h2>
-                {data.announcement.promo_description.trim() && (
-                  <p className="text-sm sm:text-[15px] text-foreground/85 leading-7 whitespace-pre-line mt-5 max-w-xl mx-auto text-left sm:text-center">
-                    {data.announcement.promo_description}
-                  </p>
-                )}
-                {data.announcement.promo_highlight.trim() && (
-                  <div className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl border border-[#B88B58]/35 bg-background/90 px-4 py-2.5 text-xs font-medium text-primary">
-                    <Gift size={14} className="text-gold shrink-0" />
-                    <span>{data.announcement.promo_highlight}</span>
-                  </div>
-                )}
-              </div>
+          <section id="promocoes" className="shell pt-8 md:pt-10">
+            <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-linear-to-br from-surface via-surface to-secondary/75 px-5 py-7 sm:px-9 sm:py-8 md:px-12 md:py-10 text-center shadow-xs">
+              {promotion.promo_badge.trim() && (
+                <p className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+                  <Gift size={13} />
+                  {promotion.promo_badge.trim()}
+                </p>
+              )}
+              <h2 className="font-display text-3xl sm:text-4xl md:text-[40px] leading-[1.12] text-foreground mt-3.5 max-w-3xl mx-auto">
+                {promotion.promo_title.trim()}
+              </h2>
+              {promotion.promo_description.trim() && (
+                <p className="whitespace-pre-line text-sm sm:text-[15px] leading-7 text-muted-foreground mt-3.5 max-w-2xl mx-auto">
+                  {promotion.promo_description.trim()}
+                </p>
+              )}
+              {promotion.promo_highlight.trim() && (
+                <div className="mt-5 inline-flex max-w-2xl items-center justify-center gap-2.5 rounded-xl border border-primary/20 bg-background/85 px-4 py-2.5 text-left sm:text-center text-xs sm:text-sm text-foreground shadow-2xs">
+                  <Sparkles size={15} className="text-primary shrink-0" />
+                  <span className="whitespace-pre-line">{promotion.promo_highlight.trim()}</span>
+                </div>
+              )}
             </div>
           </section>
         )}
         <section id="vitrine" className="shell pt-16 pb-20">
           <div className="text-center">
-            <p className="eyebrow text-gold mb-3">Curadoria Amora Acessórios</p>
-            <h2 className="section-title">Um toque de elegância para cada momento</h2>
+            <p className="eyebrow text-primary mb-3">Encontre seu próximo favorito</p>
+            <h2 className="section-title">
+              {isModa
+                ? "Looks para chamar de seus"
+                : isCalcados
+                  ? "Passos cheios de estilo"
+                  : "Um brilho para chamar de seu"}
+            </h2>
             <p className="text-sm text-muted-foreground mt-3">
-              Semijoias, bolsas para compra ou aluguel e maquiagens a partir de R$ 10.
+              {isModa
+                ? "Modelagens atemporais, conforto e estilo em cada detalhe."
+                : isCalcados
+                  ? "Conforto, acabamento e personalidade em cada escolha."
+                  : "Pequenos detalhes. Grandes encantos."}
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2 mt-8">
@@ -486,7 +585,7 @@ export function Storefront() {
               <input
                 id="search"
                 aria-label="Buscar por nome ou SKU"
-                placeholder="Buscar semijoias, bolsas ou makes..."
+                placeholder="Qual peça você procura?"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="w-full pl-10! bg-muted text-sm"
@@ -505,9 +604,9 @@ export function Storefront() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-10">
             {visibleProducts.map((p) => {
-              const isRent = isRentProduct(p);
+              const activeSize = getActiveSize(p);
               return (
-                <article key={p.id}>
+                <article key={p.id} className="flex flex-col">
                   <div className="product-image">
                     <Button
                       variant="ghost"
@@ -522,18 +621,13 @@ export function Storefront() {
                         decoding="async"
                       />
                     </Button>
-                    <div className="absolute top-3 left-3 flex flex-col items-start gap-1.5 pointer-events-none">
-                      {isRent && (
-                        <span className="bg-primary text-primary-foreground px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider">
-                          ALUGUEL
-                        </span>
-                      )}
+                    <div className="absolute top-3 left-3 flex flex-col gap-2 pointer-events-none">
                       {p.is_on_sale ? (
                         <span className="bg-primary text-primary-foreground px-2 py-1 text-[9px] uppercase tracking-wide">
                           {p.sale_label || `${((1 - p.sale_price / p.price) * 100).toFixed(0)}% OFF`}
                         </span>
                       ) : p.featured ? (
-                        <span className="bg-background/95 text-primary border border-gold-light/70 px-2 py-1 text-[9px] uppercase tracking-wide">
+                        <span className="bg-background/90 text-foreground px-2 py-1 text-[9px] uppercase tracking-wide">
                           Destaque
                         </span>
                       ) : null}
@@ -544,6 +638,7 @@ export function Storefront() {
                       )}
                     </div>
                     <span
+                      title={`${materialLabel}: ${p.material}`}
                       className={`absolute bottom-3 left-3 max-w-[calc(100%-24px)] truncate rounded-sm px-2 py-1 text-[9px] font-medium tracking-wide shadow-xs ${getMaterialBadgeClass(p.material)}`}
                     >
                       {p.material}
@@ -556,38 +651,55 @@ export function Storefront() {
                   >
                     {p.name}
                   </Button>
-                  <div className="flex gap-1.5 items-baseline mt-2 flex-wrap">
+                  <div className="flex gap-2 items-center mt-2 flex-wrap">
                     {p.is_on_sale && (
                       <del className="text-muted-foreground text-[10px]">{money(p.price)}</del>
                     )}
                     <span className="font-semibold text-sm">{money(priceOf(p))}</span>
-                    {isRent && (
-                      <span className="text-[11px] text-muted-foreground font-normal">
-                        / aluguel
-                      </span>
-                    )}
                   </div>
-                  {isRent ? (
-                    <Button
-                      variant="editorial"
-                      className="w-full text-[10px] mt-3 h-9 gap-2 px-1"
-                      disabled={!p.in_stock}
-                      onClick={() => open(p)}
+                  {p.sizes.length > 0 && (
+                    <div
+                      className="mt-2.5 flex flex-wrap gap-1.5"
+                      role="group"
+                      aria-label={`Tamanhos de ${p.name}`}
                     >
-                      <Calendar size={13} />
-                      {p.in_stock ? "Consultar aluguel" : "Indisponível"}
-                    </Button>
-                  ) : (
+                      {p.sizes.map((size) => {
+                        const isSelected = activeSize === size;
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            disabled={!p.in_stock}
+                            aria-pressed={isSelected}
+                            onClick={() =>
+                              setSelectedSizes((prev) => ({
+                                ...prev,
+                                [p.id]: size,
+                              }))
+                            }
+                            className={`min-w-7 rounded border px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background text-foreground hover:border-primary/60 hover:text-primary"
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-auto pt-3">
                     <Button
                       variant="editorial"
-                      className="w-full text-[10px] mt-3 h-9 gap-2 px-1"
+                      className="w-full text-[10px] h-9 gap-2 px-1"
                       disabled={!p.in_stock}
-                      onClick={() => add(p)}
+                      onClick={() => add(p, activeSize)}
                     >
                       <Plus size={13} />
                       {p.in_stock ? "Adicionar à sacola" : "Indisponível"}
                     </Button>
-                  )}
+                  </div>
                 </article>
               );
             })}
@@ -622,27 +734,27 @@ export function Storefront() {
             </div>
           )}
         </section>
-        <section id="como-comprar" className="bg-muted py-16">
+        <section id="envios-entregas" className="bg-muted py-16">
           <div className="shell">
             <div className="text-center">
-              <p className="eyebrow text-gold mb-3">Da nossa vitrine para você</p>
-              <h2 className="section-title">Comprar na Amora é simples e acolhedor.</h2>
+              <p className="eyebrow text-primary mb-3">Da nossa curadoria para você</p>
+              <h2 className="section-title">Comprar é simples. Encantar-se também.</h2>
             </div>
             <div className="grid md:grid-cols-3 gap-9 mt-12">
               {[
-                "Escolha seus favoritos na vitrine",
+                "Escolha suas peças na vitrine",
                 "Envie sua sacola pelo WhatsApp",
-                "Retire no Olaria ou receba em casa",
+                "Combine frete e pagamento",
               ].map((t, i) => (
                 <div key={t} className="text-center">
-                  <span className="font-display text-gold text-4xl">0{i + 1}</span>
+                  <span className="font-display text-primary text-4xl">0{i + 1}</span>
                   <h3 className="text-2xl mt-4">{t}</h3>
                   <p className="text-xs text-muted-foreground leading-6 mt-2">
                     {
                       [
-                        "Explore semijoias, bolsas para venda ou aluguel e maquiagens a partir de R$ 10.",
-                        `Seu pedido chega prontinho no ${storeContent.whatsappDisplay} para nosso atendimento.`,
-                        "Combine retirada pessoalmente no bairro Olaria, entrega em Timóteo/região ou forma de pagamento.",
+                        "Descubra os detalhes e reúna seus favoritos na sacola.",
+                        "Seu pedido chega prontinho para nosso atendimento.",
+                        "Atendimento personalizado, do pedido até a entrega.",
                       ][i]
                     }
                   </p>
@@ -650,77 +762,53 @@ export function Storefront() {
               ))}
             </div>
             <div
-              id="onde-estamos"
-              className="grid md:grid-cols-3 gap-8 border-t mt-12 pt-10 text-xs text-muted-foreground scroll-mt-28"
+              className={`grid ${
+                hasPhysicalStore ? "md:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-3"
+              } gap-8 border-t mt-12 pt-8 text-xs text-muted-foreground`}
             >
-              <a
-                id="loja-fisica"
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(storeContent.address)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="scroll-mt-28 sm:scroll-mt-32 flex flex-col justify-between rounded-lg bg-background/80 border border-gold-light/60 p-6 transition-all hover:border-[#B88B58]/60 hover:shadow-md cursor-pointer"
-              >
-                <div>
-                  <MapPin size={21} className="text-gold mb-3" />
-                  <p className="eyebrow text-gold mb-1.5">Onde estamos</p>
-                  <h3 className="text-xl text-foreground">Loja física &amp; retirada no Olaria</h3>
-                  <p className="text-foreground font-medium mt-3">{storeContent.address}</p>
-                  <p className="leading-6 mt-2">
-                    Retire seu pedido pessoalmente na loja no bairro Olaria ou solicite entrega em
-                    Timóteo e região.
-                  </p>
-                </div>
-                <p className="mt-5 pt-3 border-t border-border/60 text-primary font-medium text-xs">
-                  Ver localização no Google Maps ↗
-                </p>
-              </a>
-              <div className="rounded-lg bg-background/80 border border-border p-6">
-                <ShoppingBag size={21} className="text-gold mb-3" />
-                <p className="eyebrow text-gold mb-1.5">Eventos &amp; praticidade</p>
-                <h3 className="text-xl text-foreground">Aluguel de bolsas &amp; entregas</h3>
+              <div>
+                <Truck size={21} className="text-primary mb-3" />
+                <h3 className="text-xl text-foreground">Enviamos para todo o Brasil</h3>
                 <p className="leading-6 mt-2">
-                  Vai a uma festa, casamento ou formatura? Consulte condições e disponibilidade para
-                  aluguel de bolsas e clutches. Também realizamos entregas em Timóteo e região, com
-                  pagamento via Pix ou cartão.
+                  Envio seguro pelos Correios ou transportadora, com código de rastreio para
+                  acompanhar sua encomenda.
                 </p>
-                <div className="flex flex-wrap gap-4 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => scroll("Aluguel de Bolsas")}
-                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline cursor-pointer"
-                  >
-                    Ver aluguel de bolsas <ArrowRight size={12} />
-                  </button>
+              </div>
+              {hasPhysicalStore && physicalStore && (
+                <div>
+                  <MapPin size={21} className="text-primary mb-3" />
+                  <h3 className="text-xl text-foreground">{physicalStore.title}</h3>
+                  <p className="leading-6 mt-2">
+                    {physicalStore.address}
+                    <br />
+                    {physicalStore.cityState}
+                  </p>
                   <a
-                    href={`${storeContent.whatsapp}?text=${encodeURIComponent("Olá, Amora Acessórios! ✨ Gostaria de consultar condições e disponibilidade para aluguel de bolsas.")}`}
+                    href={mapsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-primary font-medium hover:underline"
+                    className="inline-flex items-center gap-1.5 text-primary font-medium mt-2.5 hover:underline"
                   >
-                    Consultar no WhatsApp
+                    Ver no mapa <ArrowRight size={12} />
                   </a>
                 </div>
+              )}
+              <div>
+                <CreditCard size={21} className="text-primary mb-3" />
+                <h3 className="text-xl text-foreground">Pagamento do seu jeito</h3>
+                <p className="leading-6 mt-2">
+                  Pix ou cartão de crédito. Combinamos todos os detalhes diretamente no atendimento.
+                </p>
               </div>
-              <div className="rounded-lg bg-background/80 border border-border p-6">
-                <ShieldCheck size={21} className="text-gold mb-3" />
-                <p className="eyebrow text-gold mb-1.5">Informações úteis</p>
-                <h3 className="text-xl text-foreground">Cuidados e dúvidas</h3>
-                {[
-                  "Como funciona o aluguel de bolsas?",
-                  "Como cuidar das Semijoias e Prata 925?",
-                  "Formas de pagamento e retirada",
-                ].map((q, i) => (
-                  <details key={q} className="border-b last:border-b-0 py-3">
-                    <summary className="cursor-pointer text-foreground/90 font-medium">{q}</summary>
-                    <p className="leading-6 mt-2">
-                      {
-                        [
-                          `Escolha seu modelo favorito e fale conosco pelo WhatsApp ${storeContent.whatsappDisplay} para confirmar datas, valores e retirada na loja.`,
-                          "Evite contato com perfumes, cremes, banho e piscina. Limpe com flanela macia e guarde cada peça separadamente.",
-                          `Aceitamos Pix e cartão. Você pode retirar na ${storeContent.address} ou combinar entrega em Timóteo e região.`,
-                        ][i]
-                      }
-                    </p>
+              <div>
+                <ShieldCheck size={21} className="text-primary mb-3" />
+                <h3 className="text-xl text-foreground">
+                  {isModa || isCalcados ? "Cuidados e atendimento" : "Cuidados e garantia"}
+                </h3>
+                {careItems.map(([question, answer]) => (
+                  <details key={question} className="border-b py-3">
+                    <summary className="cursor-pointer">{question}</summary>
+                    <p className="leading-6 mt-2">{answer}</p>
                   </details>
                 ))}
               </div>
@@ -728,71 +816,75 @@ export function Storefront() {
           </div>
         </section>
         <section id="sobre" className="shell py-20 text-center max-w-3xl">
-          <Sparkles className="mx-auto text-gold mb-5" size={25} />
-          <p className="eyebrow text-gold mb-3">Nossa essência</p>
-          <h2 className="section-title">Elegância nos detalhes que acompanham você.</h2>
-          <p className="text-sm text-muted-foreground leading-8 mt-6">{storeContent.about}</p>
+          <Sparkles className="mx-auto text-primary mb-5" size={25} />
+          <p className="eyebrow text-primary mb-3">Nossa essência</p>
+          <h2 className="section-title">{aboutTitle}</h2>
+          <p className="text-sm text-muted-foreground leading-8 mt-6">{aboutText}</p>
           <a
-            href={storeContent.instagram}
+            href={STORE_CONFIG.instagramUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-block font-display italic text-2xl text-primary hover:text-gold transition-colors mt-6"
+            className="inline-block font-display italic text-2xl mt-6 text-foreground hover:text-primary transition-colors"
           >
-            Com carinho, {storeContent.name} · {storeContent.instagramHandle}
+            {STORE_CONFIG.instagramHandle}
           </a>
         </section>
       </main>
-      <footer className="bg-secondary/75 border-t border-border pt-10 pb-24 md:pb-8">
+      <footer className="bg-secondary/60 border-t pt-10 pb-24 md:pb-8">
         <div className="shell grid md:grid-cols-[1fr_1fr_1fr] gap-6 items-center">
           <div>
-            <BrandLogo size="md" />
-            <p className="text-[11px] text-muted-foreground mt-3">{storeContent.subtitle}</p>
+            <img
+              src="/logo.png"
+              alt={STORE_CONFIG.name}
+              className="h-12 sm:h-14 w-auto object-contain"
+            />
+            {STORE_CONFIG.tagline && (
+              <p className="text-[11px] text-muted-foreground mt-3">{STORE_CONFIG.tagline}</p>
+            )}
           </div>
-          <div className="text-xs text-muted-foreground md:text-center leading-6 space-y-1">
-            <p className="text-foreground font-medium">{storeContent.address}</p>
-            <p>Retirada na loja · Entregas em Timóteo e região</p>
-            <p>
+          <div className="text-xs text-muted-foreground md:text-center leading-7">
+            {hasPhysicalStore && physicalStore ? (
+              <>
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-primary transition-colors"
+                >
+                  {physicalStore.address} · {physicalStore.cityState}
+                </a>
+                <br />
+                Enviamos para todo o Brasil · {STORE_CONFIG.whatsappDisplay}
+              </>
+            ) : (
+              <>
+                Loja 100% Online · {STORE_CONFIG.whatsappDisplay}
+                <br />
+                Enviamos para todo o Brasil
+              </>
+            )}
+          </div>
+          <div className="flex md:justify-end gap-3">
+            <Button variant="ghost" size="icon" asChild>
               <a
-                href={storeContent.whatsapp}
+                href={STORE_CONFIG.instagramUrl}
+                aria-label={`Instagram ${STORE_CONFIG.instagramHandle}`}
                 target="_blank"
                 rel="noreferrer"
-                className="transition-colors hover:text-primary"
               >
-                WhatsApp: {storeContent.whatsappDisplay}
+                <Instagram />
               </a>
-            </p>
-          </div>
-          <div className="flex flex-col md:items-end gap-2">
-            <div className="flex md:justify-end gap-2">
-              <Button variant="ghost" size="icon" asChild>
-                <a
-                  href={storeContent.instagram}
-                  aria-label={`Instagram ${storeContent.instagramHandle}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Instagram />
-                </a>
-              </Button>
-              <Button variant="ghost" size="icon" asChild>
-                <a
-                  href={storeContent.whatsapp}
-                  aria-label={`WhatsApp ${storeContent.whatsappDisplay}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <MessageCircle />
-                </a>
-              </Button>
-            </div>
-            <a
-              href={storeContent.instagram}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-muted-foreground hover:text-primary transition-colors"
-            >
-              {storeContent.instagramHandle}
-            </a>
+            </Button>
+            <Button variant="ghost" size="icon" asChild>
+              <a
+                href={whatsappHref}
+                aria-label={`WhatsApp ${STORE_CONFIG.whatsappDisplay}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MessageCircle />
+              </a>
+            </Button>
           </div>
         </div>
         <div className="shell mt-8 pt-5 border-t">
@@ -809,7 +901,7 @@ export function Storefront() {
               </a>
             </p>
             <p className="order-1 md:order-2 md:text-center md:justify-self-center">
-              © 2026 {storeContent.name}. Todos os direitos reservados.
+              © {new Date().getFullYear()} {STORE_CONFIG.name}. Todos os direitos reservados.
             </p>
             <Link
               to="/login"
@@ -823,7 +915,7 @@ export function Storefront() {
       </footer>
       <Button className="floating-chat" asChild>
         <a
-          href={storeContent.whatsapp}
+          href={whatsappHref}
           aria-label="Conversar pelo WhatsApp"
           target="_blank"
           rel="noreferrer"
@@ -833,173 +925,126 @@ export function Storefront() {
       </Button>
       <Dialog open={!!product} onOpenChange={(v) => !v && open(null)}>
         <DialogContent className="modal-product" onOpenAutoFocus={(e) => e.preventDefault()}>
-          {product &&
-            (isRentProduct(product) ? (
-              <div className="modal-scroll bg-background">
-                <div className="relative bg-muted">
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="w-full object-contain max-h-[46dvh] bg-muted"
-                  />
-                  <div className="absolute top-3.5 left-3.5 flex flex-col items-start gap-1.5 pointer-events-none">
-                    <span className="rounded-full bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] shadow-xs">
-                      ALUGUEL
-                    </span>
-                    {product.featured && (
-                      <span className="rounded-full bg-primary text-primary-foreground px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] shadow-xs">
-                        DESTAQUE
-                      </span>
-                    )}
-                  </div>
+          {product && (
+            <div className="modal-scroll">
+              <img
+                src={product.image_url}
+                alt={product.name}
+                className="w-full object-contain max-h-[55dvh] bg-muted"
+              />
+              <div className="p-6">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide ${getMaterialBadgeClass(product.material)}`}
+                  >
+                    {materialLabel}: {product.material}
+                  </span>
+                  <span className="eyebrow text-muted-foreground">{product.category}</span>
                 </div>
-                <div className="bg-background p-6 sm:p-7">
-                  <div className="flex items-start justify-between gap-3">
-                    <DialogTitle className="font-display text-3xl sm:text-[32px] leading-tight text-foreground">
-                      {product.name}
-                    </DialogTitle>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => share(product)}
-                      className="shrink-0 rounded-full border-border bg-background px-3.5 h-9 text-xs font-medium text-foreground hover:bg-secondary gap-1.5"
-                    >
-                      <Share2 size={13} />
-                      Compartilhar
-                    </Button>
-                  </div>
-                  <div className="flex items-baseline gap-2 mt-3 flex-wrap">
-                    {product.is_on_sale && (
-                      <del className="text-muted-foreground text-sm">{money(product.price)}</del>
-                    )}
-                    <strong className="text-2xl font-semibold text-foreground">
-                      {money(priceOf(product))}
-                    </strong>
-                    <span className="text-sm text-muted-foreground font-normal">/ aluguel</span>
-                  </div>
+                <DialogTitle className="font-display text-3xl">{product.name}</DialogTitle>
+                <div className="flex items-center gap-3 mt-4">
                   {product.is_on_sale && (
-                    <p className="text-primary text-xs mt-1.5">
-                      Economize {money(product.price - product.sale_price)}
-                    </p>
+                    <del className="text-muted-foreground text-sm">{money(product.price)}</del>
                   )}
-                  <DialogDescription className="mt-4 leading-7 text-sm text-muted-foreground">
-                    {product.description}
-                  </DialogDescription>
-                  {product.characteristics.length > 0 && (
-                    <dl className="mt-4 text-xs border-t border-border/70">
-                      {product.characteristics.map((c, i) => (
-                        <div className="flex justify-between py-2.5 border-b border-border/70" key={i}>
-                          <dt className="text-muted-foreground">{c.attribute}</dt>
-                          <dd className="text-foreground">{c.value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
-                  <div className="mt-5 pt-5 border-t border-border space-y-4">
-                    <label className="text-xs font-medium text-foreground">
-                      Data do evento
-                      <input
-                        ref={rentDateInputRef}
-                        type="date"
-                        min={todayIso}
-                        value={rentDate}
-                        onChange={(e) => setRentDate(e.target.value)}
-                        className="bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-gold"
-                      />
-                    </label>
-                    <label className="text-xs font-medium text-foreground">
-                      Seu nome (opcional)
-                      <input
-                        type="text"
-                        placeholder="Como podemos te chamar?"
-                        value={rentName}
-                        onChange={(e) => setRentName(e.target.value)}
-                        className="bg-background border border-border rounded-lg px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-gold"
-                      />
-                    </label>
-                    <p className="text-center italic text-xs text-muted-foreground pt-1">
-                      A disponibilidade é confirmada na hora pelo nosso WhatsApp.
+                  <strong className="text-xl">{money(priceOf(product))}</strong>
+                </div>
+                {product.is_on_sale && (
+                  <p className="text-primary text-xs mt-2">
+                    Economize {money(product.price - product.sale_price)}
+                  </p>
+                )}
+                {product.sizes.length > 0 && (
+                  <div className="mt-5">
+                    <p className="text-xs font-medium text-foreground mb-2">
+                      Tamanho{" "}
+                      {getActiveSize(product) ? (
+                        <span className="text-primary font-semibold">
+                          · {getActiveSize(product)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground font-normal">
+                          (selecione uma opção)
+                        </span>
+                      )}
                     </p>
-                    <Button
-                      type="button"
-                      size="lg"
-                      onClick={() => handleConsultRent(product)}
-                      className="w-full min-h-12 h-auto py-3.5 px-5 rounded-full bg-linear-to-r from-[#D8B47C] to-[#B88B58] text-[#24161B] hover:brightness-95 font-semibold uppercase tracking-wider text-xs whitespace-normal text-center shadow-sm transition-all"
+                    <div
+                      className="flex flex-wrap gap-2"
+                      role="group"
+                      aria-label="Selecionar tamanho"
                     >
-                      <MessageCircle size={18} className="shrink-0" />
-                      CONSULTAR DISPONIBILIDADE NO WHATSAPP
-                    </Button>
+                      {product.sizes.map((size) => {
+                        const isSelected = getActiveSize(product) === size;
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            disabled={!product.in_stock}
+                            aria-pressed={isSelected}
+                            onClick={() =>
+                              setSelectedSizes((prev) => ({
+                                ...prev,
+                                [product.id]: size,
+                              }))
+                            }
+                            className={`min-h-9 min-w-10 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isSelected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-background text-foreground hover:border-primary/60 hover:text-primary"
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
+                )}
+                <DialogDescription className="mt-5 leading-7 text-sm">
+                  {product.description}
+                </DialogDescription>
+                <dl className="mt-5 text-xs">
+                  {product.characteristics.map((c, i) => (
+                    <div className="flex justify-between py-3 border-b" key={i}>
+                      <dt className="text-muted-foreground">
+                        {isModa && c.attribute.trim().toLowerCase() === "material"
+                          ? "Tecido"
+                          : c.attribute}
+                      </dt>
+                      <dd>{c.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="flex gap-2 mt-6">
+                  <Button
+                    className="flex-1"
+                    size="lg"
+                    onClick={() => {
+                      if (product.in_stock) add(product, getActiveSize(product));
+                      else
+                        window.open(
+                          getWhatsappUrl(
+                            `Olá! Gostaria de ser avisada quando ${product.name} estiver disponível.`,
+                          ),
+                          "_blank",
+                          "noopener,noreferrer",
+                        );
+                    }}
+                  >
+                    <ShoppingBag />
+                    {product.in_stock ? "Adicionar à sacola" : "Avise-me no WhatsApp"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    aria-label="Compartilhar"
+                    onClick={() => share(product)}
+                  >
+                    <Share2 />
+                  </Button>
                 </div>
               </div>
-            ) : (
-              <div className="modal-scroll">
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  className="w-full object-contain max-h-[55dvh] bg-muted"
-                />
-                <div className="p-6">
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide ${getMaterialBadgeClass(product.material)}`}
-                    >
-                      {product.material}
-                    </span>
-                    <span className="eyebrow text-muted-foreground">{product.category}</span>
-                  </div>
-                  <DialogTitle className="font-display text-3xl">{product.name}</DialogTitle>
-                  <div className="flex items-center gap-3 mt-4">
-                    {product.is_on_sale && (
-                      <del className="text-muted-foreground text-sm">{money(product.price)}</del>
-                    )}
-                    <strong className="text-xl">{money(priceOf(product))}</strong>
-                  </div>
-                  {product.is_on_sale && (
-                    <p className="text-primary text-xs mt-2">
-                      Economize {money(product.price - product.sale_price)}
-                    </p>
-                  )}
-                  <DialogDescription className="mt-5 leading-7 text-sm">
-                    {product.description}
-                  </DialogDescription>
-                  <dl className="mt-5 text-xs">
-                    {product.characteristics.map((c, i) => (
-                      <div className="flex justify-between py-3 border-b" key={i}>
-                        <dt className="text-muted-foreground">{c.attribute}</dt>
-                        <dd>{c.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  <div className="flex gap-2 mt-6">
-                    <Button
-                      className="flex-1"
-                      size="lg"
-                      onClick={() => {
-                        if (product.in_stock) add(product);
-                        else
-                          window.open(
-                            `${storeContent.whatsapp}?text=${encodeURIComponent(`Olá, Amora Acessórios! ✨ Gostaria de ser avisada quando ${product.name} estiver disponível.`)}`,
-                            "_blank",
-                          );
-                      }}
-                    >
-                      <ShoppingBag />
-                      {product.in_stock ? "Adicionar à sacola" : "Avise-me no WhatsApp"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      aria-label="Compartilhar"
-                      onClick={() => share(product)}
-                    >
-                      <Share2 />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
       <Dialog open={bag} onOpenChange={setBag}>
@@ -1008,7 +1053,9 @@ export function Storefront() {
             Sua sacola <span className="text-primary">({count})</span>
           </DialogTitle>
           <DialogDescription className="text-xs mt-2">
-            Retirada no Olaria, Timóteo ou entrega combinada no WhatsApp.
+            {isModa || isCalcados
+              ? "Suas escolhas favoritas prontas para finalizar."
+              : "Um brilho especial está a caminho."}
           </DialogDescription>
           <div className="flex-1 overflow-y-auto min-h-0 py-5">
             {!cart.length ? (
@@ -1029,71 +1076,86 @@ export function Storefront() {
               </div>
             ) : (
               <>
-                {cart.map((i) => (
-                  <div key={i.product.id} className="flex gap-4 border-b py-4">
-                    <img
-                      src={i.product.image_url}
-                      alt={i.product.name}
-                      className="w-20 h-24 object-cover"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold">{i.product.name}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">{i.product.material}</p>
-                      <p className="text-xs mt-2">{money(priceOf(i.product))}</p>
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-2">
+                {cart.map((i) => {
+                  const rowKey = getCartItemKey(i.product.id, i.selectedSize);
+                  return (
+                    <div key={rowKey} className="flex gap-4 border-b py-4">
+                      <img
+                        src={i.product.image_url}
+                        alt={i.product.name}
+                        className="w-20 h-24 object-cover"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold">{i.product.name}</p>
+                        {i.selectedSize && (
+                          <p className="text-[11px] font-medium text-primary mt-0.5">
+                            Tamanho: {i.selectedSize}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {materialLabel}: {i.product.material}
+                        </p>
+                        <p className="text-xs mt-2">{money(priceOf(i.product))}</p>
+                        <div className="flex items-center justify-between mt-2">
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label={`Diminuir ${i.product.name}`}
+                              onClick={() =>
+                                setCart((c) =>
+                                  c.flatMap((row) =>
+                                    getCartItemKey(row.product.id, row.selectedSize) === rowKey
+                                      ? row.quantity > 1
+                                        ? [{ ...row, quantity: row.quantity - 1 }]
+                                        : []
+                                      : [row],
+                                  ),
+                                )
+                              }
+                            >
+                              <Minus size={12} />
+                            </Button>
+                            <span className="text-xs">{i.quantity}</span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label={`Aumentar ${i.product.name}`}
+                              onClick={() =>
+                                setCart((c) =>
+                                  c.map((row) =>
+                                    getCartItemKey(row.product.id, row.selectedSize) === rowKey
+                                      ? { ...row, quantity: row.quantity + 1 }
+                                      : row,
+                                  ),
+                                )
+                              }
+                            >
+                              <Plus size={12} />
+                            </Button>
+                          </div>
                           <Button
-                            variant="outline"
+                            variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
-                            aria-label={`Diminuir ${i.product.name}`}
+                            aria-label={`Remover ${i.product.name}`}
                             onClick={() =>
                               setCart((c) =>
-                                c.flatMap((row) =>
-                                  row.product.id === i.product.id
-                                    ? row.quantity > 1
-                                      ? [{ ...row, quantity: row.quantity - 1 }]
-                                      : []
-                                    : [row],
+                                c.filter(
+                                  (row) =>
+                                    getCartItemKey(row.product.id, row.selectedSize) !== rowKey,
                                 ),
                               )
                             }
                           >
-                            <Minus size={12} />
-                          </Button>
-                          <span className="text-xs">{i.quantity}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            aria-label={`Aumentar ${i.product.name}`}
-                            onClick={() =>
-                              setCart((c) =>
-                                c.map((row) =>
-                                  row.product.id === i.product.id
-                                    ? { ...row, quantity: row.quantity + 1 }
-                                    : row,
-                                ),
-                              )
-                            }
-                          >
-                            <Plus size={12} />
+                            <Trash2 size={14} />
                           </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Remover ${i.product.name}`}
-                          onClick={() =>
-                            setCart((c) => c.filter((row) => row.product.id !== i.product.id))
-                          }
-                        >
-                          <Trash2 size={14} />
-                        </Button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div className="mt-6">
                   <label>
                     Cupom de desconto
@@ -1154,12 +1216,8 @@ export function Storefront() {
                       <input value={name} onChange={(e) => setName(e.target.value)} />
                     </label>
                     <label>
-                      Bairro / Cidade ou Retirada na loja (opcional)
-                      <input
-                        placeholder="Ex.: Retirar no Olaria ou Timóteo - MG"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                      />
+                      CEP ou Cidade/UF (opcional)
+                      <input value={city} onChange={(e) => setCity(e.target.value)} />
                     </label>
                   </div>
                 </div>
@@ -1183,7 +1241,9 @@ export function Storefront() {
                 <span>{money(total)}</span>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Retirada na loja (Olaria, Timóteo) ou entrega combinada pelo WhatsApp
+                {hasPhysicalStore
+                  ? "Frete ou retirada presencial combinados no atendimento pelo WhatsApp"
+                  : "Frete calculado no atendimento pelo WhatsApp"}
               </p>
               <Button size="lg" className="w-full text-xs" onClick={checkout}>
                 <MessageCircle />

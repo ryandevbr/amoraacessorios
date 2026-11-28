@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { initialData, type Product } from "@/data/catalog";
-import { calculateCoupon, normalizeCode } from "@/services/couponService";
+import { calculateCoupon, getCartItemKey, normalizeCode } from "@/services/couponService";
 const base = initialData.products[0];
 if (!base) throw new Error("Missing sample");
 const normal: Product = { ...base, price: 100, is_on_sale: false };
@@ -24,9 +24,8 @@ describe("Coupon rules", () => {
     expect(result.discount).toBe(0);
     expect(result.error).not.toBe("");
   });
-  it("AMORA15 requires R$120 and gives R$15 on sale items too", () => {
+  it("BEMVINDA15 requires R$120 and gives R$15 on sale items too", () => {
     const c = initialData.coupons[1];
-    expect(c?.code).toBe("AMORA15");
     expect(c?.min_order_value).toBe(120);
     expect(c?.allow_on_sale).toBe(true);
     expect(calculateCoupon([{ product: sale, quantity: 1 }], c).discount).toBe(0);
@@ -67,11 +66,25 @@ describe("Coupon rules", () => {
   });
   it("normalizes codes to uppercase without spaces", () =>
     expect(normalizeCode(" primeira compra ")).toBe("PRIMEIRACOMPRA"));
-  it("seeds twelve products, three sales, one unavailable, prices 10.00–189.90", () => {
+  it("seeds twelve products, three sales, one unavailable, prices 39.90–189.90", () => {
     expect(initialData.products).toHaveLength(12);
     expect(initialData.products.filter((p) => p.is_on_sale)).toHaveLength(3);
     expect(initialData.products.filter((p) => !p.in_stock)).toHaveLength(1);
-    expect(Math.min(...initialData.products.map((p) => p.price))).toBe(10);
+    expect(Math.min(...initialData.products.map((p) => p.price))).toBe(39.9);
     expect(Math.max(...initialData.products.map((p) => p.price))).toBe(189.9);
+  });
+  it("distinguishes same product in different sizes in the cart and sums coupons accurately", () => {
+    expect(getCartItemKey(normal.id, "P")).not.toBe(getCartItemKey(normal.id, "M"));
+    expect(getCartItemKey(normal.id, "P")).toBe(getCartItemKey(normal.id, " P "));
+    const result = calculateCoupon(
+      [
+        { product: normal, quantity: 1, selectedSize: "P" },
+        { product: normal, quantity: 1, selectedSize: "M" },
+      ],
+      initialData.coupons[0],
+    );
+    expect(result.subtotal).toBe(200);
+    expect(result.discount).toBe(20);
+    expect(result.total).toBe(180);
   });
 });

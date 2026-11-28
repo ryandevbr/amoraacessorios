@@ -1,13 +1,13 @@
+import { STORE_CONFIG, getWhatsappUrl } from "@/config/store.config";
+
 export const storeContent = {
-  name: "Amora Acessórios",
-  subtitle: "Semijoias, Bolsas & Maquiagens",
-  instagramHandle: "@amoraacessoriosluxo",
-  instagram: "https://instagram.com/amoraacessoriosluxo",
-  whatsapp: "https://wa.me/5531988813158",
-  whatsappDisplay: "(31) 98881-3158",
-  address: "Rua 68, Nº 22 — Olaria, Timóteo - MG",
-  mapsUrl: "https://www.google.com/maps/search/?api=1&query=Rua+68+22+Olaria+Timoteo+MG",
-  slogan: "Realce sua beleza em cada detalhe: semijoias, bolsas & makes.",
+  name: STORE_CONFIG.name,
+  whatsapp: getWhatsappUrl(),
+  whatsappDisplay: STORE_CONFIG.whatsappDisplay,
+  instagram: STORE_CONFIG.instagramUrl,
+  instagramHandle: STORE_CONFIG.instagramHandle,
+  slogan: STORE_CONFIG.hero.title,
   about:
-    "Na Amora Acessórios, acreditamos que cada detalhe tem o poder de iluminar quem você é. Nossa curadoria reúne semijoias elegantes, bolsas para venda e aluguel para ocasiões especiais e maquiagens a partir de R$ 10 — unindo sofisticação, cuidado e acessibilidade. Recebemos você com carinho na nossa loja física no bairro Olaria, em Timóteo - MG, além de atendimento personalizado pelo WhatsApp com entrega em Timóteo e região.",
+    STORE_CONFIG.aboutText ??
+    "Nossa curadoria reúne estilo, qualidade e atendimento personalizado com envio para todo o Brasil.",
 };

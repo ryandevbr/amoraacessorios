@@ -2,18 +2,23 @@ import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, LockKeyhole } from "lucide-react";
 import { toast } from "sonner";
-import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
+import { STORE_CONFIG } from "@/config/store.config";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { enterDemoSession, getAuthState, signInAdmin } from "@/services/authService";
+import {
+  WRONG_STORE_ACCOUNT_ERROR,
+  enterDemoSession,
+  getAuthState,
+  signInAdmin,
+} from "@/services/authService";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Acesso ao painel | Amora Acessórios" },
-      { name: "description", content: "Acesso restrito ao painel da Amora Acessórios." },
-      { property: "og:title", content: "Painel Amora Acessórios" },
-      { property: "og:description", content: "Área da administradora da Amora Acessórios." },
+      { title: `Acesso ao painel | ${STORE_CONFIG.name}` },
+      { name: "description", content: `Acesso restrito ao painel da ${STORE_CONFIG.name}.` },
+      { property: "og:title", content: `Painel ${STORE_CONFIG.name}` },
+      { property: "og:description", content: `Área administrativa da ${STORE_CONFIG.name}.` },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex, nofollow" },
@@ -31,8 +36,11 @@ function Login() {
   useEffect(() => {
     let active = true;
     void getAuthState().then((state) => {
-      if (active && state.authenticated) {
+      if (!active) return;
+      if (state.authenticated) {
         void navigate({ to: "/admin" });
+      } else if (state.unauthorizedStore) {
+        toast.error(WRONG_STORE_ACCOUNT_ERROR, { id: "wrong-store-account" });
       }
     });
     return () => {
@@ -63,10 +71,14 @@ function Login() {
   return (
     <main className="min-h-screen bg-muted grid place-items-center px-6">
       <div className="w-full max-w-sm text-center">
-        <BrandLogo size="lg" centered className="mb-6" />
-        <LockKeyhole size={22} className="mx-auto text-gold mb-4" />
+        <img
+          src="/logo.png"
+          alt={STORE_CONFIG.name}
+          className="h-20 sm:h-24 w-auto mx-auto mb-6 object-contain"
+        />
+        <LockKeyhole size={22} className="mx-auto text-primary mb-4" />
         <h1 className="text-4xl">Seu espaço de cuidado</h1>
-        <p className="text-muted-foreground text-xs mt-3 mb-8">Painel da Amora Acessórios</p>
+        <p className="text-muted-foreground text-xs mt-3 mb-8">Painel da {STORE_CONFIG.name}</p>
         <form onSubmit={handleSubmit} className="text-left space-y-5">
           <label>
             E-mail

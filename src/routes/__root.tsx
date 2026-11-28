@@ -8,17 +8,25 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
-import { BrandLogo } from "@/components/brand-logo";
+import {
+  STORE_CONFIG,
+  applyStoreTheme,
+  buildRootThemeCss,
+  getNicheDisplayName,
+} from "@/config/store.config";
 
 import appCss from "../styles.css?url";
+
+const defaultMetaTitle = `${STORE_CONFIG.name} — ${getNicheDisplayName()}`;
+const defaultMetaDescription = STORE_CONFIG.hero.subtitle;
 
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <BrandLogo size="lg" centered className="mb-8" />
+        <img src="/logo.png" alt={STORE_CONFIG.name} className="brand-logo mx-auto mb-8" />
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">
           Esta página não foi encontrada
@@ -47,10 +55,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          Esta página não carregou
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          Algo deu errado por aqui. Você pode tentar novamente ou voltar para o início.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
@@ -60,13 +68,13 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            Tentar novamente
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            Go home
+            Voltar ao início
           </a>
         </div>
       </div>
@@ -79,42 +87,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo" },
-      {
-        name: "description",
-        content:
-          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Loja física na Rua 68, Nº 22 — Olaria, Timóteo - MG, e atendimento pelo WhatsApp (31) 98881-3158.",
-      },
+      { title: defaultMetaTitle },
+      { name: "description", content: defaultMetaDescription },
       { name: "color-scheme", content: "light only" },
-      // Remover no lançamento no domínio oficial .com.br.
       { name: "robots", content: "noindex, nofollow" },
-      {
-        property: "og:title",
-        content: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo",
-      },
-      {
-        property: "og:description",
-        content:
-          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Loja física na Rua 68, Nº 22 — Olaria, Timóteo - MG.",
-      },
+      { property: "og:title", content: defaultMetaTitle },
+      { property: "og:description", content: defaultMetaDescription },
       { property: "og:image", content: "/og-image.png" },
-      { property: "og:image:type", content: "image/png" },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
-      { property: "og:image:alt", content: "Amora Acessórios — Semijoias, Bolsas & Maquiagens" },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:alt", content: defaultMetaTitle },
       { property: "og:type", content: "website" },
       { property: "og:locale", content: "pt_BR" },
-      { property: "og:site_name", content: "Amora Acessórios" },
+      { property: "og:site_name", content: STORE_CONFIG.name },
       { name: "twitter:card", content: "summary_large_image" },
-      {
-        name: "twitter:title",
-        content: "Amora Acessórios | Semijoias, Bolsas & Maquiagens — Timóteo",
-      },
-      {
-        name: "twitter:description",
-        content:
-          "Semijoias, venda e aluguel de bolsas e maquiagens a partir de R$ 10. Rua 68, Nº 22 — Olaria, Timóteo - MG.",
-      },
+      { name: "twitter:title", content: defaultMetaTitle },
+      { name: "twitter:description", content: defaultMetaDescription },
       { name: "twitter:image", content: "/og-image.png" },
     ],
     links: [
@@ -122,7 +111,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/ico" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -142,6 +131,10 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="pt-BR">
       <head>
         <HeadContent />
+        <style
+          id="store-theme-vars"
+          dangerouslySetInnerHTML={{ __html: buildRootThemeCss(STORE_CONFIG.theme) }}
+        />
       </head>
       <body>
         {children}
@@ -153,6 +146,13 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    applyStoreTheme(STORE_CONFIG.theme, defaultMetaTitle);
+    if (!document.title.includes(STORE_CONFIG.name)) {
+      document.title = defaultMetaTitle;
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

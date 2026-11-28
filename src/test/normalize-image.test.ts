@@ -1,54 +1,81 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isHeicFile, normalizeImageFile } from "@/lib/normalize-image";
 
-let activeConversions = 0;
-let maxConcurrentConversions = 0;
+const heicToMock = vi.fn();
 
 vi.mock("heic-to", () => ({
-  heicTo: vi.fn(async ({ blob }: { blob: Blob }) => {
-    activeConversions += 1;
-    maxConcurrentConversions = Math.max(maxConcurrentConversions, activeConversions);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    activeConversions -= 1;
-    return new Blob([`jpeg:${blob.size}`], { type: "image/jpeg" });
-  }),
+  heicTo: (...args: unknown[]) => heicToMock(...args),
 }));
 
-describe("normalizeImageFile (.HEIC / .HEIF support)", () => {
-  const originalCreateImageBitmap = globalThis.createImageBitmap;
+afterEach(() => {
+  heicToMock.mockReset();
+  vi.unstubAllGlobals();
+});
 
-  afterEach(() => {
-    activeConversions = 0;
-    maxConcurrentConversions = 0;
-    globalThis.createImageBitmap = originalCreateImageBitmap;
-    vi.clearAllMocks();
+describe("normalizeImageFile", () => {
+  it("detecta arquivos HEIC e HEIF por extensão ou MIME", () => {
+    expect(isHeicFile(new File(["x"], "IMG_1234.HEIC", { type: "" }))).toBe(true);
+    expect(isHeicFile(new File(["x"], "foto.heif", { type: "" }))).toBe(true);
+    expect(isHeicFile(new File(["x"], "foto.bin", { type: "image/heic" }))).toBe(true);
+    expect(isHeicFile(new File(["x"], "foto.jpg", { type: "image/jpeg" }))).toBe(false);
+    expect(isHeicFile(new File(["x"], "banner.png", { type: "image/png" }))).toBe(false);
   });
 
-  it("detects HEIC/HEIF by MIME type or extension and returns standard images untouched", async () => {
-    const jpg = new File(["jpg-bytes"], "brinco.jpg", { type: "image/jpeg" });
-    const heicByExt = new File(["heic-bytes"], "IMG_1024.HEIC", { type: "" });
-    const heifByMime = new File(["heif-bytes"], "foto.bin", { type: "image/heif" });
-
-    expect(isHeicFile(jpg)).toBe(false);
-    expect(isHeicFile(heicByExt)).toBe(true);
-    expect(isHeicFile(heifByMime)).toBe(true);
-
-    const same = await normalizeImageFile(jpg);
-    expect(same).toBe(jpg);
+  it("retorna imediatamente arquivos que não são HEIC/HEIF sem modificar", async () => {
+    const original = new File(["jpg-bytes"], "peca.jpg", { type: "image/jpeg" });
+    const result = await normalizeImageFile(original);
+    expect(result).toBe(original);
+    expect(heicToMock).not.toHaveBeenCalled();
   });
 
-  it("falls back to queued sequential heic-to conversion when native decode is unavailable", async () => {
-    globalThis.createImageBitmap = vi.fn().mockRejectedValue(new Error("Unsupported")) as never;
+  it("usa heic-to em fila sequencial quando decodificação nativa falha", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn().mockRejectedValue(new Error("unsupported")));
 
-    const f1 = new File(["heic-1"], "IMG_0001.HEIC", { type: "image/heic" });
-    const f2 = new File(["heic-2"], "IMG_0002.heif", { type: "image/heif" });
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
 
-    const [out1, out2] = await Promise.all([normalizeImageFile(f1), normalizeImageFile(f2)]);
+    heicToMock
+      .mockImplementationOnce(async ({ blob }: { blob: File }) => {
+        order.push(`start:${blob.name}`);
+        await firstGate;
+        order.push(`end:${blob.name}`);
+        return new Blob(["jpeg-1"], { type: "image/jpeg" });
+      })
+      .mockImplementationOnce(async ({ blob }: { blob: File }) => {
+        order.push(`start:${blob.name}`);
+        order.push(`end:${blob.name}`);
+        return new Blob(["jpeg-2"], { type: "image/jpeg" });
+      });
 
-    expect(maxConcurrentConversions).toBe(1);
-    expect(out1.type).toBe("image/jpeg");
-    expect(out1.name).toBe("IMG_0001.jpg");
-    expect(out2.type).toBe("image/jpeg");
-    expect(out2.name).toBe("IMG_0002.jpg");
+    const f1 = new File(["a"], "foto1.HEIC", { type: "image/heic" });
+    const f2 = new File(["b"], "foto2.heif", { type: "image/heif" });
+
+    const p1 = normalizeImageFile(f1);
+    const p2 = normalizeImageFile(f2);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    releaseFirst();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(order).toEqual([
+      "start:foto1.HEIC",
+      "end:foto1.HEIC",
+      "start:foto2.heif",
+      "end:foto2.heif",
+    ]);
+    expect(r1.name).toBe("foto1.jpg");
+    expect(r1.type).toBe("image/jpeg");
+    expect(r2.name).toBe("foto2.jpg");
+    expect(r2.type).toBe("image/jpeg");
+    expect(heicToMock).toHaveBeenNthCalledWith(1, {
+      blob: f1,
+      type: "image/jpeg",
+      quality: 0.9,
+    });
   });
 });

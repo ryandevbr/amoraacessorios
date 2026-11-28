@@ -1,360 +1,245 @@
-export type ProductListingType = "sale" | "rent";
-
-export interface ProductCharacteristic {
-  attribute: string;
-  value: string;
-}
-export interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  category: string;
-  material: string;
-  listing_type: ProductListingType;
-  price: number;
-  sale_price: number;
-  is_on_sale: boolean;
-  sale_label: string;
-  image_url: string;
-  description: string;
-  active: boolean;
-  featured: boolean;
-  in_stock: boolean;
-  characteristics: ProductCharacteristic[];
-}
-export interface Coupon {
-  id: string;
-  code: string;
-  type: "percent" | "fixed";
-  value: number;
-  min_order_value: number;
-  expires_at: string;
-  active: boolean;
-  allow_on_sale: boolean;
-}
-export interface Banner {
-  id: string;
-  image_url: string;
-  mobile_image_url?: string | null;
-  alt: string;
-  active: boolean;
-  filter: string;
-  display_order?: number;
-}
-export type PromoCtaType = "vitrine" | "whatsapp";
-
-export interface StoreSettings {
-  active: boolean;
-  text: string;
-  link: string;
-  promo_active: boolean;
-  promo_badge: string;
-  promo_title: string;
-  promo_description: string;
-  promo_highlight: string;
-  promo_cta_label: string;
-  promo_cta_type: PromoCtaType;
-}
-export type StoreAnnouncement = StoreSettings;
-
-export const DEFAULT_STORE_PROMOTION: Pick<
+import {
+  NICHE_CATALOG_DEFAULTS,
+  STORE_CONFIG,
+  getDefaultBannerAlt,
+  getMaterialLabel,
+  isFashionNiche,
+  isFootwearNiche,
+} from "@/config/store.config";
+import type {
+  AdminProfile,
+  Banner,
+  CartItem,
+  Coupon,
+  Product,
+  ProductCharacteristic,
+  PromoCtaType,
+  StoreAnnouncement,
+  StoreData,
+  StorePromotion,
   StoreSettings,
-  | "promo_active"
-  | "promo_badge"
-  | "promo_title"
-  | "promo_description"
-  | "promo_highlight"
-  | "promo_cta_label"
-  | "promo_cta_type"
-> = {
-  promo_active: true,
-  promo_badge: "CAMPANHA ESPECIAL DA SEMANA",
-  promo_title: "Ganhe uma Consultoria de Automaquiagem!",
-  promo_description:
-    "Já pensou em aprender a escolher os produtos certos para você e ainda descobrir como se maquiar sozinha?\n\n• Nas compras a partir de R$ 150 em qualquer produto da loja, você ganha uma consultoria exclusiva.\n• Veio com uma amiga? Se cada uma comprar a partir de R$ 100, as duas ganham a consultoria!",
-  promo_highlight: "Válido por tempo limitado",
-  promo_cta_label: "",
+} from "@/types";
+
+export type {
+  AdminProfile,
+  Banner,
+  CartItem,
+  Coupon,
+  Product,
+  ProductCharacteristic,
+  PromoCtaType,
+  StoreAnnouncement,
+  StoreData,
+  StorePromotion,
+  StoreSettings,
+};
+
+export const defaultPromotion: StorePromotion = {
+  promo_active: false,
+  promo_badge: "CAMPANHA ESPECIAL",
+  promo_title: "",
+  promo_description: "",
+  promo_highlight: "",
+  promo_cta_label: "Aproveitar promoção",
   promo_cta_type: "vitrine",
 };
 
-export function shouldShowPromotion(
-  settings: Pick<StoreSettings, "promo_active" | "promo_title">,
-): boolean {
-  return Boolean(settings.promo_active) && settings.promo_title.trim() !== "";
-}
-
-export interface AdminProfile {
-  name: string;
-  email: string;
-  avatar: string;
-}
-export interface StoreData {
-  products: Product[];
-  coupons: Coupon[];
-  banners: Banner[];
-  announcement: StoreSettings;
-  profile: AdminProfile;
-}
 export const emptyStoreData: StoreData = {
   products: [],
   coupons: [],
   banners: [],
-  announcement: {
-    active: false,
-    text: "",
-    link: "#vitrine",
-    promo_active: false,
-    promo_badge: "",
-    promo_title: "",
-    promo_description: "",
-    promo_highlight: "",
-    promo_cta_label: "",
-    promo_cta_type: "vitrine",
-  },
+  announcement: { active: false, text: "", link: "#vitrine" },
+  promotion: { ...defaultPromotion },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
 
-function makeEditorialPlaceholder(
-  tag: string,
-  title: string,
-  variant: "plum" | "champagne" | "ivory" = "champagne",
-  dimensions: { width: number; height: number } = { width: 800, height: 1000 },
-): string {
-  const bg = variant === "plum" ? "#4A192C" : variant === "ivory" ? "#FCF9F5" : "#F3ECE2";
-  const accent = variant === "plum" ? "#D8BC94" : "#B88B58";
-  const text = variant === "plum" ? "#FCF9F5" : "#24161B";
-  const sub = variant === "plum" ? "#D8BC94" : "#69565C";
-  const { width, height } = dimensions;
-  const cx = width / 2;
-  const cy = height / 2 - 24;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <rect width="100%" height="100%" fill="${bg}"/>
-    <rect x="28" y="28" width="${width - 56}" height="${height - 56}" fill="none" stroke="${accent}" stroke-opacity="0.38" stroke-width="1.5"/>
-    <g transform="translate(${cx - 36}, ${cy - 68})">
-      <path d="M36 60L6 26L17 11L28 7.5L36 14L44 7.5L55 11L66 26L36 60Z" fill="none" stroke="${accent}" stroke-width="2.2" stroke-linejoin="round"/>
-      <path d="M6 26H66M17 11L22.5 26L36 60L49.5 26L55 11M36 14L22.5 26M36 14L49.5 26" fill="none" stroke="${accent}" stroke-width="1.5" stroke-linejoin="round"/>
-    </g>
-    <text x="${cx}" y="${cy + 36}" text-anchor="middle" font-family="Georgia, serif" font-size="24" letter-spacing="6" fill="${accent}">AMORA</text>
-    <text x="${cx}" y="${cy + 70}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" letter-spacing="3" fill="${sub}">${tag.toUpperCase()}</text>
-    <text x="${cx}" y="${cy + 106}" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="${text}">${title}</text>
-  </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
+const isModa = isFashionNiche();
+const isCalcados = isFootwearNiche();
 
-interface DemoSeedItem {
-  name: string;
-  category: string;
-  material: string;
-  listing_type?: ProductListingType;
-  price: number;
-  is_on_sale?: boolean;
-  featured?: boolean;
-  in_stock?: boolean;
-  description: string;
-  variant: "plum" | "champagne" | "ivory";
-  characteristics: ProductCharacteristic[];
-}
+const names = isModa
+  ? [
+      "Vestido Midi Linho Natural",
+      "Conjunto Alfaiataria Essencial",
+      "Blusa Tricot Gola Alta",
+      "Calça Pantalona Viscolinho",
+      "Cropped Canelado Decote Reto",
+      "Saia Midi Crepe Fluido",
+      "Macacão Longo Alfaiataria",
+      "Vestido Curto Algodão Leve",
+      "Short Alfaiataria Cintura Alta",
+      "Conjunto Tricot Inverno",
+      "Biquíni Poliamida Texturizada",
+      "Camisa Linho Manga Longa",
+    ]
+  : isCalcados
+    ? [
+        "Sandália Salto Bloco Napa",
+        "Rasteira Tiras Finas Couro",
+        "Tênis Casual Branco Couro",
+        "Bota Cano Curto Camurça",
+        "Scarpin Clássico Verniz",
+        "Sapatilha Bico Fino Napa",
+        "Mule Minimalista Couro Sintético",
+        "Slide Confortável EVA",
+        "Sandália Anabela Camurça",
+        "Bota Coturno Couro",
+        "Tênis Knit Têxtil Malha",
+        "Tamanco Salto Geométrico Napa",
+      ]
+    : [
+        "Argola Dourada Essencial",
+        "Colar Coração em Prata",
+        "Colar Duplo Pérola",
+        "Anel Solitário em Prata",
+        "Pulseira Riviera Dourada",
+        "Argola Delicada em Prata",
+        "Colar Sol Dourado",
+        "Pulseira Coração em Prata",
+        "Brinco Pérola Clássica",
+        "Anel Abraço em Prata",
+        "Conjunto Pérola Dourado",
+        "Colar Estrela em Prata",
+      ];
 
-const demoItems: DemoSeedItem[] = [
-  {
-    name: "Argola Cravejada Dourada",
-    category: "Brincos",
-    material: "Semijoia",
-    price: 69.9,
-    is_on_sale: true,
-    featured: true,
-    variant: "champagne",
-    description:
-      "Argola sofisticada com brilho delicado que ilumina qualquer produção. Perfeita para compor looks do dia a dia ou eventos especiais.",
-    characteristics: [
-      { attribute: "Acabamento", value: "Banho dourado polido" },
-      { attribute: "Pedra", value: "Zircônias cravejadas" },
-      { attribute: "Estilo", value: "Clássico atemporal" },
-    ],
-  },
-  {
-    name: "Clutch Festa Dourada Champanhe",
-    category: "Aluguel de Bolsas",
-    material: "Aluguel",
-    listing_type: "rent",
-    price: 59.9,
-    featured: true,
-    variant: "plum",
-    description:
-      "Clutch estruturada em tom champanhe perfeita para casamentos, formaturas e festas. Consulte disponibilidade de datas pelo WhatsApp.",
-    characteristics: [
-      { attribute: "Modalidade", value: "Aluguel para eventos" },
-      { attribute: "Cor", value: "Dourado champanhe" },
-      { attribute: "Alça", value: "Corrente removível" },
-    ],
-  },
-  {
-    name: "Gloss Labial Brilho Espelhado",
-    category: "Maquiagens",
-    material: "Maquiagem",
-    price: 14.9,
-    featured: true,
-    variant: "ivory",
-    description:
-      "Textura confortável com brilho espelhado e toque hidratante para realçar os lábios em segundos. Ideal para levar sempre na bolsa.",
-    characteristics: [
-      { attribute: "Tipo", value: "Gloss labial" },
-      { attribute: "Acabamento", value: "Espelhado luminoso" },
-      { attribute: "Uso", value: "Dia a dia e eventos" },
-    ],
-  },
-  {
-    name: "Bolsa Tiracolo Estruturada Nude",
-    category: "Bolsas",
-    material: "Bolsa",
-    price: 159.9,
-    featured: true,
-    variant: "champagne",
-    description:
-      "Design moderno e estruturado com ferragens douradas e ótimo espaço interno. Versátil para transitar do trabalho ao jantar com elegância.",
-    characteristics: [
-      { attribute: "Modelo", value: "Tiracolo estruturada" },
-      { attribute: "Cor", value: "Nude champanhe" },
-      { attribute: "Detalhes", value: "Ferragens douradas" },
-    ],
-  },
-  {
-    name: "Colar Ponto de Luz em Prata",
-    category: "Colares",
-    material: "Prata 925",
-    price: 89.9,
-    variant: "ivory",
-    description:
-      "Corrente delicada em Prata 925 com pingente ponto de luz que garante brilho sutil e feminino em todas as ocasiões.",
-    characteristics: [
-      { attribute: "Material", value: "Prata 925" },
-      { attribute: "Acabamento", value: "Polido" },
-      { attribute: "Estilo", value: "Minimalista delicado" },
-    ],
-  },
-  {
-    name: "Pulseira Riviera Dourada",
-    category: "Pulseiras",
-    material: "Semijoia",
-    price: 129.9,
-    is_on_sale: true,
-    variant: "champagne",
-    description:
-      "Clássica pulseira riviera cravejada para elevar qualquer combinação de pulsos com sofisticação e brilho intenso.",
-    characteristics: [
-      { attribute: "Acabamento", value: "Banho dourado" },
-      { attribute: "Pedra", value: "Zircônias cristal" },
-      { attribute: "Ocasião", value: "Social e festa" },
-    ],
-  },
-  {
-    name: "Paleta de Sombras Tons Terrosos",
-    category: "Maquiagens",
-    material: "Maquiagem",
-    price: 29.9,
-    variant: "ivory",
-    description:
-      "Cores versáteis entre opacos aveludados e cintilantes dourados para criar desde makes suaves até esfumados marcantes.",
-    characteristics: [
-      { attribute: "Tipo", value: "Paleta de sombras" },
-      { attribute: "Acabamento", value: "Matte e cintilante" },
-      { attribute: "Paleta", value: "Tons neutros e dourados" },
-    ],
-  },
-  {
-    name: "Anel Solitário em Prata 925",
-    category: "Anéis",
-    material: "Prata 925",
-    price: 94.9,
-    variant: "champagne",
-    description:
-      "Anel solitário de linhas delicadas com zircônia central luminosa. Uma peça coringa para usar sozinha ou em mix de anéis.",
-    characteristics: [
-      { attribute: "Material", value: "Prata 925" },
-      { attribute: "Pedra", value: "Zircônia solitária" },
-      { attribute: "Estilo", value: "Romântico clássico" },
-    ],
-  },
-  {
-    name: "Clutch Pérolas Noiva & Festa",
-    category: "Aluguel de Bolsas",
-    material: "Aluguel",
-    listing_type: "rent",
-    price: 69.9,
-    variant: "plum",
-    description:
-      "Peça sofisticada com acabamento perolado e fecho joia dourado, pensada para madrinhas, formandas e convidadas especiais.",
-    characteristics: [
-      { attribute: "Modalidade", value: "Aluguel para festas" },
-      { attribute: "Acabamento", value: "Perolado com fecho dourado" },
-      { attribute: "Ocasião", value: "Casamentos e gala" },
-    ],
-  },
-  {
-    name: "Anel Orgânico Banhado a Ouro",
-    category: "Anéis",
-    material: "Semijoia",
-    price: 74.9,
-    in_stock: false,
-    variant: "champagne",
-    description:
-      "Design autoral de curvas orgânicas e brilho espelhado para compor produções modernas e cheias de personalidade.",
-    characteristics: [
-      { attribute: "Acabamento", value: "Dourado espelhado" },
-      { attribute: "Design", value: "Formas orgânicas" },
-      { attribute: "Estilo", value: "Contemporâneo" },
-    ],
-  },
-  {
-    name: "Conjunto Pérola Clássico",
-    category: "Conjuntos",
-    material: "Semijoia",
-    price: 189.9,
-    is_on_sale: true,
-    variant: "plum",
-    description:
-      "Colar e brincos harmonizados com pérolas delicadas e banho dourado impecável — escolha certeira para presentear ou brilhar em eventos.",
-    characteristics: [
-      { attribute: "Composição", value: "Colar + par de brincos" },
-      { attribute: "Detalhe", value: "Pérolas clássicas" },
-      { attribute: "Acabamento", value: "Banho dourado" },
-    ],
-  },
-  {
-    name: "Blush Compacto Aveludado",
-    category: "Maquiagens",
-    material: "Maquiagem",
-    price: 10.0,
-    variant: "ivory",
-    description:
-      "Textura fina e fácil de esfumar que devolve o ar saudável às maçãs do rosto com acabamento natural e longa duração.",
-    characteristics: [
-      { attribute: "Tipo", value: "Blush compacto" },
-      { attribute: "Acabamento", value: "Aveludado natural" },
-      { attribute: "Diferencial", value: "Linha make a partir de R$ 10" },
-    ],
-  },
+const categories = isModa
+  ? [
+      "Vestidos",
+      "Conjuntos",
+      "Tricot & Inverno",
+      "Calças",
+      "Blusas & Croppeds",
+      "Shorts & Saias",
+      "Macaquinhos & Macacões",
+      "Vestidos",
+      "Shorts & Saias",
+      "Tricot & Inverno",
+      "Moda Praia",
+      "Blusas & Croppeds",
+    ]
+  : isCalcados
+    ? [
+        "Sandálias",
+        "Rasteiras",
+        "Tênis",
+        "Botas",
+        "Scarpins",
+        "Sapatilhas",
+        "Mules & Tamancos",
+        "Chinelos & Slides",
+        "Sandálias",
+        "Botas",
+        "Tênis",
+        "Mules & Tamancos",
+      ]
+    : [
+        "Brincos",
+        "Colares",
+        "Colares",
+        "Anéis",
+        "Pulseiras",
+        "Brincos",
+        "Colares",
+        "Pulseiras",
+        "Brincos",
+        "Anéis",
+        "Conjuntos",
+        "Colares",
+      ];
+
+const modaMaterials = [
+  "Linho",
+  "Alfaiataria",
+  "Tricot",
+  "Viscolinho",
+  "Canelado",
+  "Crepe",
+  "Alfaiataria",
+  "Algodão",
+  "Alfaiataria",
+  "Tricot",
+  "Poliamida",
+  "Linho",
 ];
 
+const calcadosMaterials = [
+  "Napa",
+  "Couro",
+  "Couro",
+  "Camurça",
+  "Verniz",
+  "Napa",
+  "Couro Sintético",
+  "Borracha / EVA",
+  "Camurça",
+  "Couro",
+  "Têxtil / Malha",
+  "Napa",
+];
+
+const prices = [69.9, 89.9, 119.9, 99.9, 149.9, 59.9, 79.9, 89.9, 39.9, 69.9, 189.9, 99.9];
+
+const defaultBannerAlt = getDefaultBannerAlt();
+const materialLabel = getMaterialLabel();
+
 export const initialData: StoreData = {
-  products: demoItems.map((item, i) => ({
-    id: `amora-${i + 1}`,
-    name: item.name,
-    sku: `AM${String(i + 1).padStart(3, "0")}`,
-    category: item.category,
-    material: item.material,
-    listing_type: item.listing_type ?? "sale",
-    price: item.price,
-    sale_price: Number((item.price * 0.8).toFixed(2)),
-    is_on_sale: Boolean(item.is_on_sale),
-    sale_label: "",
-    image_url: makeEditorialPlaceholder(item.category, item.name, item.variant),
-    description: item.description,
-    active: true,
-    featured: Boolean(item.featured),
-    in_stock: item.in_stock ?? true,
-    characteristics: item.characteristics,
-  })),
+  products: names.map((name, i) => {
+    const itemMaterial = isModa
+      ? (modaMaterials[i] ?? "Alfaiataria")
+      : isCalcados
+        ? (calcadosMaterials[i] ?? "Couro")
+        : [1, 3, 5, 7, 9, 11].includes(i)
+          ? "Prata 925"
+          : "Semijoia";
+
+    return {
+      id: `item-${i + 1}`,
+      name,
+      sku: `SKU${String(i + 1).padStart(3, "0")}`,
+      category:
+        categories[i] ?? NICHE_CATALOG_DEFAULTS[STORE_CONFIG.niche].categories[0] ?? "Conjuntos",
+      material: itemMaterial,
+      price: prices[i] ?? 69.9,
+      sale_price: Number(((prices[i] ?? 69.9) * 0.8).toFixed(2)),
+      is_on_sale: [0, 4, 10].includes(i),
+      sale_label: "",
+      image_url: "/logo.png",
+      description: isModa
+        ? "Peça de modelagem elegante e caimento impecável, pensada para acompanhar sua rotina com conforto e sofisticação em diversas ocasiões."
+        : isCalcados
+          ? "Calçado confortável com acabamento cuidadoso, ideal para acompanhar o seu dia com estilo, leveza e estabilidade."
+          : "Um toque de delicadeza para acompanhar seus melhores momentos. Uma peça selecionada com carinho, perfeita para compor looks e presentear alguém especial.",
+      active: true,
+      featured: i < 4,
+      in_stock: i !== 9,
+      sizes: isModa
+        ? i === 10
+          ? ["Tamanho Único"]
+          : ["P", "M", "G"]
+        : isCalcados
+          ? ["35", "36", "37", "38"]
+          : [],
+      characteristics: isModa
+        ? [
+            { attribute: materialLabel, value: itemMaterial },
+            { attribute: "Caimento", value: "Confortável e estruturado" },
+            { attribute: "Ocasião", value: "Dia a dia e eventos" },
+          ]
+        : isCalcados
+          ? [
+              { attribute: materialLabel, value: itemMaterial },
+              { attribute: "Palmilha", value: "Macia e anatômica" },
+              { attribute: "Ocasião", value: "Dia a dia e eventos" },
+            ]
+          : [
+              {
+                attribute: materialLabel,
+                value: [1, 3, 5, 7, 9, 11].includes(i) ? "Prata 925" : "Banho de ouro 18k",
+              },
+              { attribute: "Acabamento", value: "Polido" },
+              { attribute: "Detalhes", value: "Design delicado" },
+            ],
+    };
+  }),
   coupons: [
     {
       id: "first",
@@ -368,7 +253,7 @@ export const initialData: StoreData = {
     },
     {
       id: "fixed",
-      code: "AMORA15",
+      code: "BEMVINDA15",
       type: "fixed",
       value: 15,
       min_order_value: 120,
@@ -380,125 +265,40 @@ export const initialData: StoreData = {
   banners: [
     {
       id: "b1",
-      image_url: makeEditorialPlaceholder(
-        "Semijoias, Bolsas & Maquiagens",
-        "Curadoria Amora Acessórios",
-        "plum",
-        { width: 1600, height: 900 },
-      ),
-      alt: "Banner Amora Acessórios — Semijoias, bolsas e maquiagens",
+      image_url: "/logo.png",
+      alt: defaultBannerAlt,
       active: true,
       filter: "",
     },
     {
       id: "b2",
-      image_url: makeEditorialPlaceholder(
-        "Venda e Aluguel de Bolsas",
-        "Clutches & Bolsas para Festas",
-        "champagne",
-        { width: 1600, height: 900 },
-      ),
-      alt: "Banner Amora Acessórios — Aluguel de Bolsas",
+      image_url: "/logo.png",
+      alt: defaultBannerAlt,
       active: true,
-      filter: "Aluguel de Bolsas",
+      filter: isModa ? "Vestidos" : isCalcados ? "Sandálias" : "Semijoias",
     },
     {
       id: "b3",
-      image_url: makeEditorialPlaceholder(
-        "Makes a partir de R$ 10",
-        "Beleza para todos os momentos",
-        "ivory",
-        { width: 1600, height: 900 },
-      ),
-      alt: "Banner Amora Acessórios — Maquiagens",
+      image_url: "/logo.png",
+      alt: defaultBannerAlt,
       active: true,
-      filter: "Maquiagens",
+      filter: isModa ? "Conjuntos" : isCalcados ? "Tênis" : "Prata 925",
     },
   ],
   announcement: {
     active: true,
-    text: "✨ Ganhe uma Consultoria de Automaquiagem nas compras a partir de R$ 150 (ou R$ 100 cada com uma amiga)!",
-    link: "#promocoes",
-    ...DEFAULT_STORE_PROMOTION,
+    text: STORE_CONFIG.defaultAnnouncement,
+    link: "#vitrine",
   },
+  promotion: { ...defaultPromotion },
   profile: { name: "Administradora", email: "", avatar: "" },
 };
-export const DEFAULT_CATEGORIES = [
-  "Semijoias",
-  "Bolsas",
-  "Aluguel de Bolsas",
-  "Maquiagens",
-  "Anéis",
-  "Colares",
-  "Brincos",
-  "Pulseiras",
-  "Conjuntos",
-] as const;
-export const DEFAULT_MATERIALS = [
-  "Semijoia",
-  "Prata 925",
-  "Bolsa",
-  "Aluguel",
-  "Maquiagem",
-] as const;
+
+export const DEFAULT_CATEGORIES = NICHE_CATALOG_DEFAULTS[STORE_CONFIG.niche].categories;
+export const DEFAULT_MATERIALS = NICHE_CATALOG_DEFAULTS[STORE_CONFIG.niche].materials;
 export const categoriesList: string[] = [...DEFAULT_CATEGORIES];
 export const materialsList: string[] = [...DEFAULT_MATERIALS];
+
 export const money = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 export const priceOf = (p: Product) => (p.is_on_sale ? p.sale_price : p.price);
-
-const RENT_LABELS = new Set(["aluguel", "aluguel de bolsas"]);
-
-export function isRentProduct(
-  product: Pick<Product, "category" | "material"> & { listing_type?: ProductListingType },
-): boolean {
-  if (product.listing_type === "rent") return true;
-  const cat = (product.category ?? "").trim().toLocaleLowerCase("pt-BR");
-  const mat = (product.material ?? "").trim().toLocaleLowerCase("pt-BR");
-  return RENT_LABELS.has(cat) || RENT_LABELS.has(mat);
-}
-
-export function resolveListingType(
-  rawListingType: unknown,
-  category: string,
-  material: string,
-): ProductListingType {
-  if (rawListingType === "rent") return "rent";
-  return isRentProduct({ listing_type: "sale", category, material }) ? "rent" : "sale";
-}
-
-export function getTodayLocalIsoDate(now = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-export function formatDateBr(isoDate: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim());
-  if (!match) return isoDate.trim();
-  return `${match[3]}/${match[2]}/${match[1]}`;
-}
-
-export function buildRentWhatsAppMessage(params: {
-  product: Product;
-  eventDateIso: string;
-  customerName?: string;
-  productUrl: string;
-}): string {
-  const formattedPrice = money(priceOf(params.product));
-  const formattedDate = formatDateBr(params.eventDateIso);
-  const trimmedName = (params.customerName ?? "").trim();
-  const lines = [
-    "Olá, Amora Acessórios! ✨",
-    "Gostaria de consultar a disponibilidade de *aluguel* da peça:",
-    "",
-    `• *${params.product.name}* (${formattedPrice} / aluguel)`,
-    `📅 Data do evento: ${formattedDate}`,
-    ...(trimmedName ? [`👤 Nome: ${trimmedName}`] : []),
-    `🔗 Link da peça: ${params.productUrl}`,
-    "",
-    "Aguardo a confirmação da disponibilidade!",
-  ];
-  return lines.join("\n");
-}

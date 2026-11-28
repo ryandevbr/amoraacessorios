@@ -66,8 +66,8 @@ export const STORE_CONFIG = {
     mapsQuery: "",
   },
   theme: {
-    primary: "#361c2e",
-    primaryHover: "#2c1625",
+    primary: "#3a2832",
+    primaryHover: "#2f2029",
     secondary: "#d8c39e",
     background: "#f5efef",
     surface: "#efe6e4",
